@@ -239,6 +239,30 @@
       "isoDate": "2025-09-11T06:42:44.000Z",
       "status": "offered",
       "offeredAt": "2025-09-11T09:41:25.573Z"
+    },
+    "id:https://t.me/anrbc/12931": {
+      "id": "https://t.me/anrbc/12931",
+      "link": "https://t.me/anrbc/12931",
+      "source": "anrbc",
+      "isoDate": "2025-09-10T16:05:32.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-11T10:13:28.210Z"
+    },
+    "uh:b97254416a57e510e69081ac47d1866f5c6f74de50801c5f3f47a1c47b4d4654": {
+      "id": "https://t.me/anrbc/12931",
+      "link": "https://t.me/anrbc/12931",
+      "source": "anrbc",
+      "isoDate": "2025-09-10T16:05:32.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-11T10:13:28.210Z"
+    },
+    "ch:fbcf41b3be9936a415e96b33a696fc8ab1e9183bf01f531d74fe9c2ffeb82ea7": {
+      "id": "https://t.me/anrbc/12931",
+      "link": "https://t.me/anrbc/12931",
+      "source": "anrbc",
+      "isoDate": "2025-09-10T16:05:32.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-11T10:13:28.210Z"
     }
   }
 }
