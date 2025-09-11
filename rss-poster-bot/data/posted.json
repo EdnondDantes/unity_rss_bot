@@ -407,6 +407,246 @@
       "isoDate": "2024-07-23T03:29:46.000Z",
       "status": "offered",
       "offeredAt": "2025-09-11T11:29:57.169Z"
+    },
+    "id:https://t.me/avtonovosti_rus/1091": {
+      "id": "https://t.me/avtonovosti_rus/1091",
+      "link": "https://t.me/avtonovosti_rus/1091",
+      "source": "avtonovosti_rus",
+      "isoDate": "2025-09-10T12:06:58.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-11T13:58:50.156Z"
+    },
+    "uh:6917ec8e52ab640a45a263a74fde8ac09599825219f911272cda10c2a777ac01": {
+      "id": "https://t.me/avtonovosti_rus/1091",
+      "link": "https://t.me/avtonovosti_rus/1091",
+      "source": "avtonovosti_rus",
+      "isoDate": "2025-09-10T12:06:58.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-11T13:58:50.156Z"
+    },
+    "ch:ea5d253ef12bfa033a269dd20f47f6f198dc0b2dc2112b976bd20c9aee241cba": {
+      "id": "https://t.me/avtonovosti_rus/1091",
+      "link": "https://t.me/avtonovosti_rus/1091",
+      "source": "avtonovosti_rus",
+      "isoDate": "2025-09-10T12:06:58.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-11T13:58:50.156Z"
+    },
+    "id:https://t.me/nexpertGM/11705": {
+      "id": "https://t.me/nexpertGM/11705",
+      "link": "https://t.me/nexpertGM/11705",
+      "source": "nexpertgm",
+      "isoDate": "2025-09-11T13:05:56.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T13:59:32.401Z"
+    },
+    "uh:fc5a7ae91ead9e8d4bfe79bf3411b5961ef18eb304666697c9cbc9682dfba6f6": {
+      "id": "https://t.me/nexpertGM/11705",
+      "link": "https://t.me/nexpertGM/11705",
+      "source": "nexpertgm",
+      "isoDate": "2025-09-11T13:05:56.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T13:59:32.401Z"
+    },
+    "ch:c43d566fff020cb25c5883bd732b72ec41ab14b3ea0358e4d617ba2b908f70e6": {
+      "id": "https://t.me/nexpertGM/11705",
+      "link": "https://t.me/nexpertGM/11705",
+      "source": "nexpertgm",
+      "isoDate": "2025-09-11T13:05:56.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T13:59:32.401Z"
+    },
+    "id:https://t.me/avtonovosti_rus/1092": {
+      "id": "https://t.me/avtonovosti_rus/1092",
+      "link": "https://t.me/avtonovosti_rus/1092",
+      "source": "avtonovosti_rus",
+      "isoDate": "2025-09-11T10:13:16.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-11T15:09:28.528Z"
+    },
+    "uh:3b53176b3c51be8432f898237b666f20645436894e1a1ded07bd6561b6e611af": {
+      "id": "https://t.me/avtonovosti_rus/1092",
+      "link": "https://t.me/avtonovosti_rus/1092",
+      "source": "avtonovosti_rus",
+      "isoDate": "2025-09-11T10:13:16.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-11T15:09:28.528Z"
+    },
+    "ch:db5a07add7f10f93ae4a40f5c241a5be7ae410a8b17acb410b44fe705fb9ce76": {
+      "id": "https://t.me/avtonovosti_rus/1092",
+      "link": "https://t.me/avtonovosti_rus/1092",
+      "source": "avtonovosti_rus",
+      "isoDate": "2025-09-11T10:13:16.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-11T15:09:28.528Z"
+    },
+    "id:https://t.me/nexpertGM/11706": {
+      "id": "https://t.me/nexpertGM/11706",
+      "link": "https://t.me/nexpertGM/11706",
+      "source": "nexpertGM",
+      "isoDate": "2025-09-11T15:04:01.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T15:14:03.996Z"
+    },
+    "uh:a245857b1adc688d6b2ce55e2a99dcfcbca770abd83a7c49b095e7542ef50374": {
+      "id": "https://t.me/nexpertGM/11706",
+      "link": "https://t.me/nexpertGM/11706",
+      "source": "nexpertGM",
+      "isoDate": "2025-09-11T15:04:01.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T15:14:03.996Z"
+    },
+    "ch:b1ac56c1a7235de7b44a1c3c7c1eb9bd422ec503260293ec1e8da3d66ba1bf1b": {
+      "id": "https://t.me/nexpertGM/11706",
+      "link": "https://t.me/nexpertGM/11706",
+      "source": "nexpertGM",
+      "isoDate": "2025-09-11T15:04:01.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T15:14:03.996Z"
+    },
+    "id:https://t.me/anrbc/12946": {
+      "id": "https://t.me/anrbc/12946",
+      "link": "https://t.me/anrbc/12946",
+      "source": "anrbc",
+      "isoDate": "2025-09-11T15:01:17.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-11T15:17:33.514Z"
+    },
+    "uh:2b09ce1b4400dc8b06389efa3aea09bae88a0aee8ebe6f64a9dd3a8c7c114859": {
+      "id": "https://t.me/anrbc/12946",
+      "link": "https://t.me/anrbc/12946",
+      "source": "anrbc",
+      "isoDate": "2025-09-11T15:01:17.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-11T15:17:33.514Z"
+    },
+    "ch:81908fbc8bd5d6a7a59cf1da8b843e0c96aa5d96e1f4e26206b6dec761bd920c": {
+      "id": "https://t.me/anrbc/12946",
+      "link": "https://t.me/anrbc/12946",
+      "source": "anrbc",
+      "isoDate": "2025-09-11T15:01:17.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-11T15:17:33.514Z"
+    },
+    "id:https://t.me/anrbc/12942": {
+      "id": "https://t.me/anrbc/12942",
+      "link": "https://t.me/anrbc/12942",
+      "source": "anrbc",
+      "isoDate": "2025-09-11T13:01:02.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T15:17:47.790Z"
+    },
+    "uh:96adedca1fbced3628743741cf629ae0dd7375ad35a9d7a75e69e34a685fab9e": {
+      "id": "https://t.me/anrbc/12942",
+      "link": "https://t.me/anrbc/12942",
+      "source": "anrbc",
+      "isoDate": "2025-09-11T13:01:02.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T15:17:47.790Z"
+    },
+    "ch:69dd5f67d5a30873101a9ba02b4ed2fe3016fdfa78275a909b1b197282da36bf": {
+      "id": "https://t.me/anrbc/12942",
+      "link": "https://t.me/anrbc/12942",
+      "source": "anrbc",
+      "isoDate": "2025-09-11T13:01:02.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T15:17:47.790Z"
+    },
+    "id:https://t.me/drom/31900": {
+      "id": "https://t.me/drom/31900",
+      "link": "https://t.me/drom/31900",
+      "source": "drom",
+      "isoDate": "2025-09-11T12:34:52.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T15:18:44.305Z"
+    },
+    "uh:800b9862f4135f32fcfd204f47ac1c09446d45bfc102d0a6ce67b7419aa39f17": {
+      "id": "https://t.me/drom/31900",
+      "link": "https://t.me/drom/31900",
+      "source": "drom",
+      "isoDate": "2025-09-11T12:34:52.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T15:18:44.305Z"
+    },
+    "ch:8890358ac425ce626760d9b64ca187bf46b1af559b75042489ae7a0368709f69": {
+      "id": "https://t.me/drom/31900",
+      "link": "https://t.me/drom/31900",
+      "source": "drom",
+      "isoDate": "2025-09-11T12:34:52.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T15:18:44.305Z"
+    },
+    "id:https://t.me/anrbc/12941": {
+      "id": "https://t.me/anrbc/12941",
+      "link": "https://t.me/anrbc/12941",
+      "source": "anrbc",
+      "isoDate": "2025-09-11T12:06:19.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T15:20:03.682Z"
+    },
+    "uh:c9f77926c8ec03f04d519cae118ade565cc6aa3ec609d2181ace4b4fe08dfd68": {
+      "id": "https://t.me/anrbc/12941",
+      "link": "https://t.me/anrbc/12941",
+      "source": "anrbc",
+      "isoDate": "2025-09-11T12:06:19.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T15:20:03.682Z"
+    },
+    "ch:081b64b2ce66779e5f130fa76853615bfe73474575ba06bf9fc751685a5cbfe1": {
+      "id": "https://t.me/anrbc/12941",
+      "link": "https://t.me/anrbc/12941",
+      "source": "anrbc",
+      "isoDate": "2025-09-11T12:06:19.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T15:20:03.682Z"
+    },
+    "id:https://t.me/nexpertGM/11703": {
+      "id": "https://t.me/nexpertGM/11703",
+      "link": "https://t.me/nexpertGM/11703",
+      "source": "nexpertGM",
+      "isoDate": "2025-09-11T12:04:13.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T15:20:27.739Z"
+    },
+    "uh:802dd699328d337ac3997b6ef414c1d9ee7f15535d1b820273bd58f963e64111": {
+      "id": "https://t.me/nexpertGM/11703",
+      "link": "https://t.me/nexpertGM/11703",
+      "source": "nexpertGM",
+      "isoDate": "2025-09-11T12:04:13.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T15:20:27.739Z"
+    },
+    "ch:c7a1eea85bd7a111cee45ac8edb8887569151e8cfaaf7b983869604f3137185f": {
+      "id": "https://t.me/nexpertGM/11703",
+      "link": "https://t.me/nexpertGM/11703",
+      "source": "nexpertGM",
+      "isoDate": "2025-09-11T12:04:13.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T15:20:27.739Z"
+    },
+    "id:https://t.me/drom/31897": {
+      "id": "https://t.me/drom/31897",
+      "link": "https://t.me/drom/31897",
+      "source": "drom",
+      "isoDate": "2025-09-11T11:11:16.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T15:20:53.967Z"
+    },
+    "uh:b5fd6ea920c5995926e71fac558720f9004597fbd488b74ad18c551841298227": {
+      "id": "https://t.me/drom/31897",
+      "link": "https://t.me/drom/31897",
+      "source": "drom",
+      "isoDate": "2025-09-11T11:11:16.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T15:20:53.967Z"
+    },
+    "ch:8844a190dad32131543344e5d291da353fb97bc045884d73da82a1bd3b5f2e5e": {
+      "id": "https://t.me/drom/31897",
+      "link": "https://t.me/drom/31897",
+      "source": "drom",
+      "isoDate": "2025-09-11T11:11:16.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-11T15:20:53.967Z"
     }
   }
 }

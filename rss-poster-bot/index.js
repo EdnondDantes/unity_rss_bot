@@ -1,17 +1,3 @@
-// index.js — Node 16
-// deps: telegraf@4, node-fetch@2, form-data@4, cheerio@1, jimp@0.22, dotenv
-
-require('dotenv').config();
-const { Telegraf, Markup } = require('telegraf');
-const fetch = require('node-fetch'); // v2 для Node 16
-const FormData = require('form-data');
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
-const cheerio = require('cheerio');
-const Jimp = require('jimp');
-
-// ----------------- Текстовый промпт для переписывания -----------------
 const TEXT_PROMPT = `
 РОЛЬ: опытный редактор автоновостей и факт-чекер на русском.
 ЦЕЛЬ: на основе ВХОДНОГО ТЕКСТА создать полностью оригинальную новость, сохранив факты и цифры, убрав штампы, улучшив структуру и читабельность. Допускается лёгкое расширение контекстом без выдумок.
@@ -55,6 +41,19 @@ const TEXT_PROMPT = `
 - Корректность ссылок.
 - Ясность и читабельность.
 `;
+// index.js — Node 16
+// deps: telegraf@4, node-fetch@2, form-data@4, cheerio@1, jimp@0.22, dotenv
+// Новое: прямой парсинг https://t.me/s/<username>, без RSSHub. Берём 3 свежие из каждого канала.
+
+require('dotenv').config();
+const { Telegraf, Markup } = require('telegraf');
+const fetch = require('node-fetch'); // v2 для Node 16
+const FormData = require('form-data');
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const cheerio = require('cheerio');
+const Jimp = require('jimp');
 
 // ----------------- Утилиты -----------------
 const DATA_DIR = path.join(__dirname, 'data');
@@ -83,12 +82,26 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHANNEL_ID = process.env.CHANNEL_ID; // @username или -100...
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com').replace(/\/+$/,'');
-const FEED_URLS = (process.env.FEED_URLS || '')
+// Новое: список каналов (юзернеймы или ссылки t.me/...); если нет — подставим твои 5 каналов
+const CHANNELS = (process.env.CHANNELS || '')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
+const DEFAULT_CHANNELS = [
+  't.me/AutoDrajv',
+  't.me/drom',
+  't.me/anrbc',
+  't.me/nexpertGM',
+  't.me/avtonovosti_rus'
+];
+const PARSE_CHANNELS = (CHANNELS.length ? CHANNELS : DEFAULT_CHANNELS)
+  .map(s => s.replace(/^https?:\/\/t\.me\/(s\/)?/i, ''))
+  .map(s => s.replace(/^t\.me\//i, ''))
+  .map(s => s.replace(/^@/, ''))
+  .filter(Boolean);
+
 const MAX_PHOTOS = Math.min(Number(process.env.MAX_PHOTOS || 10), 10);
-const FEED_DELAY_MS = Number(process.env.FEED_DELAY_MS || 3000);
+const FEED_DELAY_MS = Number(process.env.FEED_DELAY_MS || 3000); // пауза между каналами (вежливость)
 
 // Параметры обработки изображений
 const IMG_STYLE = (process.env.IMG_STYLE || 'cinematic').toLowerCase(); // cinematic|vivid|matte|noir|bw
@@ -112,7 +125,8 @@ const IMG_VARIATION_TRIES = Number(process.env.IMG_VARIATION_TRIES || 1);
 log('config.load.begin');
 log('config.values', {
   node: process.version,
-  feeds_count: FEED_URLS.length,
+  channels_count: PARSE_CHANNELS.length,
+  channels: PARSE_CHANNELS,
   channel_id: CHANNEL_ID,
   bot_token: mask(BOT_TOKEN),
   openai_key: mask(OPENAI_API_KEY),
@@ -136,8 +150,9 @@ log('config.values', {
   img_variation_tries: IMG_VARIATION_TRIES
 });
 
-if (!BOT_TOKEN || !CHANNEL_ID || !OPENAI_API_KEY || FEED_URLS.length === 0) {
+if (!BOT_TOKEN || !CHANNEL_ID || !OPENAI_API_KEY || PARSE_CHANNELS.length === 0) {
   log('config.error.missing_env');
+  console.error('Нужны BOT_TOKEN, CHANNEL_ID, OPENAI_API_KEY и CHANNELS (или используйте дефолтный список).');
   process.exit(1);
 }
 
@@ -237,76 +252,139 @@ function toTs(s) {
   return out;
 }
 
-// ----------------- RSS загрузка -----------------
-async function fetchFeed(url) {
-  log('rss.fetch.begin', { url });
+// ----------------- Парсинг Telegram (без RSSHub) -----------------
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) MiniTGFeedBot/1.0';
+
+function extractPostIdFromLink(link = '') {
+  try {
+    const m = String(link).match(/\/(\d+)(?:\?.*)?$/);
+    return m ? Number(m[1]) : 0;
+  } catch { return 0; }
+}
+
+// Скачиваем HTML https://t.me/s/<username>
+async function fetchChannelPageHTML(username) {
+  const url = `https://t.me/s/${encodeURIComponent(username)}`;
+  log('tme.fetch.begin', { url });
   const maxTries = 3;
   for (let attempt = 1; attempt <= maxTries; attempt++) {
     try {
       const res = await fetch(url, {
-        headers: { 'User-Agent': 'rss-poster-bot/1.0 (Node16)' },
-        timeout: 18000
+        headers: {
+          'User-Agent': UA,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        },
+        timeout: 20000
       });
-      log('rss.fetch.status', { url, status: res.status, attempt });
-      if (res.status === 429) {
-        const wait = 1000 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 1200);
-        log('rss.fetch.backoff', { url, wait });
+      log('tme.fetch.status', { status: res.status, attempt });
+      if (res.status === 429 || res.status === 503) {
+        const wait = 800 * attempt + Math.floor(Math.random() * 500);
+        log('tme.fetch.backoff', { wait });
         await sleep(wait);
         continue;
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json().catch(() => ({}));
-      const arr = Array.isArray(json) ? json : (json.items || []);
-      log('rss.fetch.done', { url, items: arr.length, attempt });
-      return arr;
+      const html = await res.text();
+      log('tme.fetch.done', { len: html.length });
+      return html;
     } catch (e) {
-      log('rss.fetch.error', { url, attempt, error: e.message });
-      const wait = 900 * attempt + Math.floor(Math.random() * 500);
+      log('tme.fetch.error', { attempt, error: e.message });
+      const wait = 600 * attempt + Math.floor(Math.random() * 400);
       await sleep(wait);
     }
   }
-  log('rss.fetch.fail', { url });
-  return [];
+  return '';
 }
 
-async function fetchAllFeeds() {
-  log('rss.all.begin', { count: FEED_URLS.length });
+// Разбор HTML → массив сообщений {id, link, title, isoDate, content, contentSnippet}
+function parseTMeMessages(username, html) {
+  const $ = cheerio.load(html);
   const items = [];
 
-  for (let idx = 0; idx < FEED_URLS.length; idx++) {
-    const url = FEED_URLS[idx];
-    const arr = await fetchFeed(url);
-    const srcPath = new URL(url).pathname;
-    const source = srcPath.split('/').pop().split('?')[0] || 'unknown';
+  $('.tgme_widget_message').each((_, el) => {
+    const $el = $(el);
 
-    for (const it of arr) {
-      const id = it.id || it.guid || it.url || it.link || '';
-      const link = it.url || it.link || it.guid || it.id || '';
-      const title = it.title || it.name || '';
-      const contentHtml = it.content_html || it.content || it.summary || '';
-      const contentText = it.content_text || stripHtml(contentHtml) || it.description || '';
-      const isoDate = it.isoDate || it.pubDate || it.date_published || it.date_modified || it.date || null;
-
-      items.push({
-        source,
-        id,
-        link,
-        title,
-        isoDate,
-        content: contentHtml,
-        contentSnippet: contentText
-      });
+    const link = $el.find('a.tgme_widget_message_date').attr('href') || '';
+    let isoDate = $el.find('.tgme_widget_message_date time').attr('datetime') || null;
+    if (isoDate) {
+      try { isoDate = new Date(isoDate).toISOString(); } catch { isoDate = null; }
     }
 
-    log('rss.all.after_one', { url, added: arr.length, total: items.length });
-    if (idx < FEED_URLS.length - 1) {
-      log('rss.all.sleep', { ms: FEED_DELAY_MS });
-      await sleep(FEED_DELAY_MS);
+    const textHtml = $el.find('.tgme_widget_message_text').html() || '';
+    const textPlain = $el.find('.tgme_widget_message_text').text().replace(/\s+/g, ' ').trim();
+
+    // Извлекаем картинки из background-image и из <img>, и добавляем <img> в content, чтобы дальше твой пайплайн их увидел
+    const imgs = new Set();
+    $el.find('a.tgme_widget_message_photo_wrap').each((__, a) => {
+      const style = $(a).attr('style') || '';
+      const m = style.match(/url\(['"]?(.*?)['"]?\)/i);
+      if (m && m[1]) imgs.add(m[1]);
+    });
+    $el.find('img').each((__, img) => {
+      const src = $(img).attr('src');
+      if (src && /^https?:\/\//.test(src)) imgs.add(src);
+    });
+    const imgHtml = Array.from(imgs).map(u => `<p><img src="${u}" alt="photo"/></p>`).join('');
+
+    const id = link || ($el.attr('data-post') ? `https://t.me/${$el.attr('data-post')}` : '');
+    const title = (textPlain || 'Публикация').slice(0, 140);
+
+    items.push({
+      source: username,
+      id,
+      link: link || id,
+      title,
+      isoDate,
+      content: (textHtml || '') + imgHtml,
+      contentSnippet: textPlain
+    });
+  });
+
+  // Сортируем: по времени desc, при равенстве — по numeric id desc
+  items.sort((a, b) => {
+    const ta = a.isoDate ? Date.parse(a.isoDate) : 0;
+    const tb = b.isoDate ? Date.parse(b.isoDate) : 0;
+    if (tb !== ta) return tb - ta;
+    return extractPostIdFromLink(b.link) - extractPostIdFromLink(a.link);
+  });
+
+  log('tme.parse.done', { user: username, total: items.length });
+  return items;
+}
+
+// Возвращаем 3 крайние поста канала
+async function fetchLatestFromChannel(username, take = 3) {
+  const html = await fetchChannelPageHTML(username);
+  if (!html) return [];
+  const all = parseTMeMessages(username, html);
+  const top = all.slice(0, Math.max(1, Math.min(50, take))); // 1..50 защитно
+  log('tme.latest', { user: username, take, returned: top.length });
+  return top;
+}
+
+// Сбор по всем каналам: по 3 из каждого → слияние (всего до 15)
+async function fetchAllFeeds() {
+  log('fetchAllFeeds.begin', { channels: PARSE_CHANNELS.length });
+  const merged = [];
+  for (let i = 0; i < PARSE_CHANNELS.length; i++) {
+    const user = PARSE_CHANNELS[i];
+    const arr = await fetchLatestFromChannel(user, 3);
+    for (const it of arr) merged.push(it);
+    log('fetchAllFeeds.channel_done', { user, added: arr.length, total: merged.length });
+    if (i < PARSE_CHANNELS.length - 1) {
+      log('fetchAllFeeds.sleep', { ms: FEED_DELAY_MS });
+      await sleep(FEED_DELAY_MS); // вежливый интервал между каналами
     }
   }
-
-  log('rss.all.merged', { total: items.length });
-  return items;
+  // merged уже отсортирован внутри каналов; отсортируем общий массив по времени desc
+  merged.sort((a, b) => {
+    const ta = a.isoDate ? Date.parse(a.isoDate) : 0;
+    const tb = b.isoDate ? Date.parse(b.isoDate) : 0;
+    if (tb !== ta) return tb - ta;
+    return extractPostIdFromLink(b.link) - extractPostIdFromLink(a.link);
+  });
+  log('fetchAllFeeds.done', { total: merged.length });
+  return merged;
 }
 
 // ----------------- OpenAI (текст) -----------------
@@ -520,7 +598,7 @@ async function hashDistances(origBuf, candBuf) {
   return { d: hamming(dhA, dhB), p: hamming(phA, phB) };
 }
 
-// ---- Структурная аугментация (кроп 88–96%, флип, поворот, репозиционирование на блюр-фон) ----
+// ---- Структурная аугментация ----
 async function structuralAugment(buf, targetW, targetH) {
   const img = await Jimp.read(buf);
 
@@ -832,12 +910,12 @@ bot.action('cancel', async (ctx) => {
   }
 });
 
-// Показ следующей свежей записи
+// Показ следующей свежей записи (самая свежая из 3×N)
 async function offerNext(ctx) {
   log('offer.next.begin', { chat: ctx.chat?.id });
   try {
     await ctx.reply('Ищу самую свежую запись…');
-    const items = await fetchAllFeeds();
+    const items = await fetchAllFeeds(); // теперь: 3 из каждого канала, потом объединение
     const normalized = items.map(it => ({ ...it, ts: toTs(it.isoDate) }));
     normalized.sort((a, b) => b.ts - a.ts);
     log('offer.sorted', { count: normalized.length, top_ts: normalized[0]?.ts });
@@ -1033,7 +1111,7 @@ async function verifyChannelAccess(bot) {
   try {
     log('bot.launch.begin');
     await bot.launch();
-    log('bot.launch.ok', { feeds: FEED_URLS.length, store: STORE_PATH, log: LOG_PATH });
+    log('bot.launch.ok', { channels: PARSE_CHANNELS.length, store: STORE_PATH, log: LOG_PATH });
 
     await verifyChannelAccess(bot);
 
