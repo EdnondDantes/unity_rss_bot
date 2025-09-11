@@ -1,52 +1,3 @@
-
-// ----------------- Текстовый промпт для переписывания -----------------
-const TEXT_PROMPT = `
-Роль: Ты — редактор Telegram-канала про авто. Из одного входного RAW-текста делаешь читабельный, цепляющий пост с эмодзи и вопросами-«байтами» для комментариев. Работай только с фактами из RAW (названия, цифры, формулировки), но пересказывай своими словами.
-
-АУДИТОРИЯ: автолюбители, ищущие новости в автотематике.
-ТОН: автоматически подбери по содержанию RAW (экспертный/дружелюбный/ироничный/нейтральный), без токсичности.
-ДЛИНА: стандарт (≈600–900 знаков).
-ЭМОДЗИ: средняя плотность (1–2 на строку, не подряд), только по смыслу.
-CTA: «комменты», «подписка», «репост».
-Ссылки, хэштеги и PIN-комментарий — не использовать.
-
-ВХОД:
-RAW = {{сюда вставлен исходный текст/выжимка/факты; это единственный источник}}
-
-ПРЕОБРАЗОВАНИЕ (чтобы текст звучал естественно):
-— Перескажи RAW на 100% своими словами, сохраняя факты и цифры.
-— Меняй порядок фактов на логичный для читателя: что произошло → важные детали → чем это полезно.
-— Варьируй длину предложений (короткие ↔ средние), избегай однообразного ритма.
-— Избегай клише и канцелярита («данный», «также», «в рамках», «итог»). Никаких служебных пометок.
-— Добавляй естественные связки («в целом», «если коротко», «по сути», «а главное»), но без воды.
-— Не копируй формулировки из RAW дословно (кроме названий/индексов/цифр).
-
-СТРУКТУРА ВЫХОДА (строго, без заголовков и служебных слов):
-1) ХУК — 1 короткое предложение, сразу к сути; допустимо 1–2 эмодзи.
-2) 3–6 коротких абзацев по 1–2 строки:
-   • что нового/что произошло;
-   • ключевые характеристики/изменения/комплектации (точно сохранённые цифры);
-   • что это значит для читателя (практическая ценность).
-3) ВОПРОСЫ-«БАЙТЫ» (2–3 шт., каждый на своей строке, разных типов):
-   • Да/нет: «Взяли бы себе такое?», «Стоит своих денег?»
-   • Выбор: «База или топ?», «Бензин или гибрид?»
-   • Личный опыт: «Кто уже ездил — что удивило?», «Какие слабые места?»
-   Допустимы живые формулировки вроде «Купили бы такую?», «Что думаете?», «Купили бы Aston Martin своей ляльке? 😉»
-4) CTA (1–2 строки, без ссылок):
-   • «Пишите в комментах — читаем всё 👇»
-   • «Подпишитесь, чтобы не пропустить новое 🔔»
-   • «Киньте другу, кто выбирает тачку ➡️»
-
-КОНТРОЛЬ ПЕРЕД ВЫВОДОМ:
-— 600–900 знаков; без ссылок, хэштегов и PIN.
-— 2–3 разных «байта» (да/нет + выбор + опыт).
-— Эмодзи не мешают чтению и не идут подряд.
-— Нет однообразных штампов, нет дословных кусков из RAW (кроме имен/цифр).
-
-ФОРМАТ ВЫХОДА:
-— Выведи только готовый текст поста (никаких «Хук/Факты/CTA», без пояснений).
-`;
-
 // index.js — Node 16
 // deps: telegraf@4, node-fetch@2, form-data@4, cheerio@1, jimp@0.22, dotenv
 
@@ -60,6 +11,50 @@ const path = require('path');
 const cheerio = require('cheerio');
 const Jimp = require('jimp');
 
+// ----------------- Текстовый промпт для переписывания -----------------
+const TEXT_PROMPT = `
+РОЛЬ: опытный редактор автоновостей и факт-чекер на русском.
+ЦЕЛЬ: на основе ВХОДНОГО ТЕКСТА создать полностью оригинальную новость, сохранив факты и цифры, убрав штампы, улучшив структуру и читабельность. Допускается лёгкое расширение контекстом без выдумок.
+ВХОД:
+- SOURCE_TEXT: исходный текст(ы) с фактами/ссылками.
+- LENGTH: short | medium (по умолчанию: short).
+- FORMAT: markdown (по умолчанию).
+- CTA: none | question (по умолчанию: question).
+ОБЩИЕ ПРАВИЛА ПЕРЕРАБОТКИ:
+1) Не копируй фразы и порядок предложений из SOURCE_TEXT. Пересобери материал: измени синтаксис, порядок фактов, формулировки, ритм.
+2) Факты и цифры сохраняй точными. Ничего не выдумывай. Если данных нет — пропусти блок.
+3) Единицы: мм, км/ч, л.с., с, кг, л; неразрывный пробел; 17 000; десятичные — с запятой.
+4) Тон: нейтрально-информативный, без маркетинга, эмодзи, КАПСА, кликбейта.
+5) Ссылки из SOURCE_TEXT сохрани как Markdown [якорь](URL).
+6) Дополняй только общеизвестным контекстом; избегай спекуляций.
+7) Названия/индексы перепроверяй; не искажай.
+СТРУКТУРА ВЫХОДА:
+1) Заголовок (H2) С ярким хуком. ≤ 60 знаков.
+2) 3–6 коротких абзацев по 1–2 строки:
+   • что нового/что произошло;
+   • ключевые характеристики/изменения/комплектации (точно сохранённые цифры);
+   • что это значит для читателя (практическая ценность).
+3) ВОПРОСЫ-«БАЙТЫ» (2–3 шт., каждый на своей строке, разных типов):
+   • Да/нет: «Взяли бы себе такое?», «Стоит своих денег?»
+   • Выбор: «База или топ?», «Бензин или гибрид?»
+   • Личный опыт: «Кто уже ездил — что удивило?», «Какие слабые места?»
+   Допустимы живые формулировки вроде «Купили бы такую?», «Что думаете?», «Купили бы Aston Martin своей ляльке? 😉»
+4) CTA (1–2 строки, без ссылок):
+   • «Пишите в комментах — читаем всё 👇»
+   • «Подпишитесь, чтобы не пропустить новое 🔔»
+   • «Киньте другу, кто выбирает тачку ➡️»
+ТРЕБОВАНИЯ:
+- Средняя длина 9–15 слов; абзацы 1–3 предложения; связки «Кроме того», «При этом» и т.д.
+- Единый стиль чисел/единиц.
+- Без тавтологии и канцелярита.
+ДЛИНА:
+- short: ~120–180 слов; medium: ~220–350 слов.
+ПРОВЕРКИ:
+- Совпадение фактов/чисел.
+- Антиплагиат: иной порядок/формулировки.
+- Корректность ссылок.
+- Ясность и читабельность.
+`;
 
 // ----------------- Утилиты -----------------
 const DATA_DIR = path.join(__dirname, 'data');
@@ -101,14 +96,18 @@ const IMG_FILTER_STRENGTH = (process.env.IMG_FILTER_STRENGTH || 'medium').toLowe
 const IMG_DIFF_THRESHOLD = Number(process.env.IMG_DIFF_THRESHOLD || 0.04); // 0..1 — «слишком похоже»
 const IMG_ALWAYS_LOCAL_FILTER = process.env.IMG_ALWAYS_LOCAL_FILTER === '1';
 
-// --- Новые параметры для структурных отличий ---
+// --- Новые параметры для структурных отличий / variations ---
 const IMG_ENSURE_STRUCT = process.env.IMG_ENSURE_STRUCT === '0' ? false : true; // включено по умолчанию
-const IMG_PHASH_MIN_DIST = Number(process.env.IMG_PHASH_MIN_DIST || 12); // требуемая дистанция dHash (из 64)
+// Пороги «непохожести» по хэшам (0..64); совместимость с старым IMG_PHASH_MIN_DIST
+const IMG_DHASH_MIN_DIST = Number(process.env.IMG_DHASH_MIN_DIST || process.env.IMG_PHASH_MIN_DIST || 12); // dHash
+const IMG_PHASH_DCT_MIN_DIST = Number(process.env.IMG_PHASH_DCT_MIN_DIST || 10); // pHash(DCT)
 const IMG_ROTATE_MAX_DEG = Number(process.env.IMG_ROTATE_MAX_DEG || 5.0); // ±градусов
 const IMG_FLIP_PROB = Number(process.env.IMG_FLIP_PROB || 0.5); // вероятность горизонтального флипа
 const IMG_CROP_MIN = Number(process.env.IMG_CROP_MIN || 0.88);  // доля стороны при кропе
 const IMG_CROP_MAX = Number(process.env.IMG_CROP_MAX || 0.96);
 const IMG_STRUCT_TRIES = Number(process.env.IMG_STRUCT_TRIES || 3); // попыток добиться дистанции
+const IMG_ALLOW_VARIATIONS = process.env.IMG_ALLOW_VARIATIONS === '0' ? false : true; // разрешить /v1/images/variations
+const IMG_VARIATION_TRIES = Number(process.env.IMG_VARIATION_TRIES || 1);
 
 log('config.load.begin');
 log('config.values', {
@@ -126,12 +125,15 @@ log('config.values', {
   img_diff_threshold: IMG_DIFF_THRESHOLD,
   img_always_local_filter: IMG_ALWAYS_LOCAL_FILTER,
   img_ensure_struct: IMG_ENSURE_STRUCT,
-  img_phash_min_dist: IMG_PHASH_MIN_DIST,
+  img_dhash_min_dist: IMG_DHASH_MIN_DIST,
+  img_phash_dct_min_dist: IMG_PHASH_DCT_MIN_DIST,
   img_rotate_max_deg: IMG_ROTATE_MAX_DEG,
   img_flip_prob: IMG_FLIP_PROB,
   img_crop_min: IMG_CROP_MIN,
   img_crop_max: IMG_CROP_MAX,
-  img_struct_tries: IMG_STRUCT_TRIES
+  img_struct_tries: IMG_STRUCT_TRIES,
+  img_allow_variations: IMG_ALLOW_VARIATIONS,
+  img_variation_tries: IMG_VARIATION_TRIES
 });
 
 if (!BOT_TOKEN || !CHANNEL_ID || !OPENAI_API_KEY || FEED_URLS.length === 0) {
@@ -307,7 +309,7 @@ async function fetchAllFeeds() {
   return items;
 }
 
-// ----------------- OpenAI -----------------
+// ----------------- OpenAI (текст) -----------------
 async function openaiChatRewrite({ title, plain, link }) {
   const body = {
     model: 'gpt-4o-mini',
@@ -355,7 +357,8 @@ function splitTitleFromBody(markdown = '') {
   return { title, body };
 }
 
-// PNG без ресайза (сохраняем W×H), конвертируем в PNG для edits
+// ----------------- Изображения: служебные -----------------
+// PNG без ресайза (сохраняем W×H), конвертируем в PNG для edits/variations
 async function toPngKeepSize(buffer) {
   log('img.toPngKeepSize.begin', { in_size: buffer.length });
   const img = await Jimp.read(buffer);
@@ -378,7 +381,7 @@ async function stretchToOriginalSize(editedBuf, targetW, targetH) {
   return out;
 }
 
-// OpenAI edits — всегда 1024×1024 + заметный color grading по стилю
+// OpenAI edits — смена фона/грейд; 1024×1024
 async function openaiEditBackground(pngBuffer) {
   log('openai.img.req.begin', { in_size: pngBuffer.length, size: '1024x1024', IMG_STYLE, IMG_FILTER_STRENGTH });
 
@@ -401,7 +404,7 @@ async function openaiEditBackground(pngBuffer) {
   form.append('prompt', [
     'Change the background to a neutral soft bokeh; remove any text/watermarks.',
     'Keep the main subject intact, composition and realism preserved.',
-    styleLine + '; ' + strengthLine + '; no borders; no frames; no text.',
+    styleLine + '; ' + strengthLine + '; no borders; no frames; no text.'
   ].join(' '));
   form.append('size', '1024x1024');
   form.append('n', '1');
@@ -429,6 +432,32 @@ async function openaiEditBackground(pngBuffer) {
   }
 }
 
+// OpenAI variations — перерисовка; 1024×1024
+async function openaiVariation(pngBuffer) {
+  const form = new FormData();
+  form.append('image', pngBuffer, { filename: 'image.png', contentType: 'image/png' });
+  form.append('size', '1024x1024');
+  form.append('n', '1');
+  form.append('response_format', 'b64_json');
+  try {
+    const res = await fetch(`${OPENAI_BASE_URL}/v1/images/variations`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, ...form.getHeaders() },
+      body: form,
+      timeout: 90000
+    });
+    const txt = await res.text();
+    log('openai.variation.status', { status: res.status, len: txt.length });
+    const json = JSON.parse(txt);
+    if (!res.ok) throw new Error(txt);
+    const b64 = json.data?.[0]?.b64_json;
+    return b64 ? Buffer.from(b64, 'base64') : null;
+  } catch (e) {
+    log('openai.variation.error', { error: e.message });
+    return null;
+  }
+}
+
 // ---- dHash 64-бит (инвариантен к цвету/яркости, реагирует на композицию) ----
 async function dhash64(buf) {
   const W = 9, H = 8; // (W-1)*H = 64 бита
@@ -450,18 +479,56 @@ function hamming(a, b) {
   return d;
 }
 
-// ---- Структурная аугментация (кроп 72–88%, флип, поворот, перепозиционирование на блюр-фоне) ----
+// ---- pHash (DCT) 64-бит (63 реально используемых) ----
+async function phash64(buf) {
+  const img = await Jimp.read(buf);
+  img.resize(32, 32).greyscale();
+  const N = 32;
+  const f = Array.from({ length: N }, () => Array(N).fill(0));
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    f[y][x] = Jimp.intToRGBA(img.getPixelColor(x, y)).r / 255;
+  }
+  const C = (k) => (k === 0 ? Math.SQRT1_2 : 1);
+  const F = Array.from({ length: N }, () => Array(N).fill(0));
+  for (let u = 0; u < N; u++) {
+    for (let v = 0; v < N; v++) {
+      let sum = 0;
+      for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+          sum += f[y][x] *
+            Math.cos(((2 * x + 1) * u * Math.PI) / (2 * N)) *
+            Math.cos(((2 * y + 1) * v * Math.PI) / (2 * N));
+        }
+      }
+      F[u][v] = (C(u) * C(v) / 4) * sum;
+    }
+  }
+  const coeffs = [];
+  for (let u = 0; u < 8; u++) for (let v = 0; v < 8; v++) {
+    if (u === 0 && v === 0) continue;
+    coeffs.push(F[u][v]);
+  }
+  const median = coeffs.slice().sort((a,b)=>a-b)[Math.floor(coeffs.length/2)];
+  let bits = '';
+  for (const c of coeffs) bits += (c > median) ? '1' : '0';
+  return bits; // длина 63
+}
+
+async function hashDistances(origBuf, candBuf) {
+  const [dhA, dhB] = await Promise.all([dhash64(origBuf), dhash64(candBuf)]);
+  const [phA, phB] = await Promise.all([phash64(origBuf), phash64(candBuf)]);
+  return { d: hamming(dhA, dhB), p: hamming(phA, phB) };
+}
+
+// ---- Структурная аугментация (кроп 88–96%, флип, поворот, репозиционирование на блюр-фон) ----
 async function structuralAugment(buf, targetW, targetH) {
   const img = await Jimp.read(buf);
 
-  // вероятностный флип
   if (Math.random() < IMG_FLIP_PROB) img.flip(true, false);
 
-  // лёгкий поворот
   const ang = (Math.random() * 2 - 1) * IMG_ROTATE_MAX_DEG;
   img.rotate(ang, false); // без увеличения канвы
 
-  // кроп
   const cropK = IMG_CROP_MIN + Math.random() * (IMG_CROP_MAX - IMG_CROP_MIN);
   const cw = Math.max(8, Math.floor(img.getWidth() * cropK));
   const ch = Math.max(8, Math.floor(img.getHeight() * cropK));
@@ -471,12 +538,10 @@ async function structuralAugment(buf, targetW, targetH) {
   const y = Math.floor(Math.random() * (maxY + 1));
   const cropped = img.clone().crop(x, y, cw, ch);
 
-  // фон из блюра исходника
   const bg = img.clone().blur(8).resize(targetW, targetH);
   const out = new Jimp(targetW, targetH);
   out.composite(bg, 0, 0);
 
-  // вписываем кроп + небольшое "смещение к третям"
   const k = Math.min(targetW / cw, targetH / ch);
   const nw = Math.max(1, Math.floor(cw * k));
   const nh = Math.max(1, Math.floor(ch * k));
@@ -485,14 +550,13 @@ async function structuralAugment(buf, targetW, targetH) {
   cropped.resize(nw, nh, Jimp.RESIZE_BILINEAR);
   out.composite(cropped, ox, oy);
 
-  // лёгкая виньетка по краям
   const vign = new Jimp(targetW, targetH, 0x00000000);
   const edge = Math.max(targetW, targetH);
   for (let yy = 0; yy < targetH; yy++) {
     for (let xx = 0; xx < targetW; xx++) {
       const dx = (xx - targetW / 2), dy = (yy - targetH / 2);
       const r = Math.sqrt(dx * dx + dy * dy) / (edge / 2);
-      const a = Math.max(0, Math.min(80, Math.floor((r - 0.6) * 220))); // 0..80
+      const a = Math.max(0, Math.min(80, Math.floor((r - 0.6) * 220)));
       vign.setPixelColor(Jimp.rgbaToInt(0, 0, 0, a), xx, yy);
     }
   }
@@ -500,22 +564,31 @@ async function structuralAugment(buf, targetW, targetH) {
   return await out.getBufferAsync(Jimp.MIME_PNG);
 }
 
-// Гарантировать расстояние dHash с исходником; несколько попыток
-async function ensureStructDiff(origPng, candidateBuf, W, H) {
+// Гарантировать отличие по dHash + pHash; при необходимости — variations
+async function ensureDistinctEnough(origPng, candidateBuf, W, H) {
   let out = candidateBuf;
-  const origHash = await dhash64(origPng);
   for (let i = 0; i < IMG_STRUCT_TRIES; i++) {
-    const aug = await structuralAugment(out, W, H);
-    const augHash = await dhash64(aug);
-    const dist = hamming(origHash, augHash);
-    log('img.struct.check', { try: i + 1, phash_dist: dist, need: IMG_PHASH_MIN_DIST });
-    out = aug;
-    if (dist >= IMG_PHASH_MIN_DIST) return aug;
+    out = await structuralAugment(out, W, H);
+    const dist = await hashDistances(origPng, out);
+    log('img.struct.check', { try: i + 1, dHash: dist.d, pHash: dist.p, needD: IMG_DHASH_MIN_DIST, needP: IMG_PHASH_DCT_MIN_DIST });
+    if (dist.d >= IMG_DHASH_MIN_DIST && dist.p >= IMG_PHASH_DCT_MIN_DIST) return out;
+  }
+  if (!IMG_ALLOW_VARIATIONS) return out;
+
+  for (let j = 0; j < IMG_VARIATION_TRIES; j++) {
+    const v = await openaiVariation(out);
+    if (!v) continue;
+    const stretched = await stretchToOriginalSize(v, W, H).catch(()=>v);
+    const finalTry = await structuralAugment(stretched, W, H);
+    const dist = await hashDistances(origPng, finalTry);
+    log('img.variation.check', { attempt: j + 1, dHash: dist.d, pHash: dist.p });
+    if (dist.d >= IMG_DHASH_MIN_DIST && dist.p >= IMG_PHASH_DCT_MIN_DIST) return finalTry;
+    out = finalTry;
   }
   return out;
 }
 
-// Оценка «насколько отличаются» картинки (0..1): downscale до 64×64 и суммарная разница RGB
+// Оценка «насколько отличаются» картинки (0..1)
 async function diffRatio(aBuf, bBuf) {
   const SIZE = 64;
   const a = await Jimp.read(aBuf);
@@ -536,7 +609,7 @@ async function diffRatio(aBuf, bBuf) {
   return ratio;
 }
 
-// Локальный фильтр (Jimp) — гарантированная «заметность»
+// Локальный фильтр (Jimp)
 async function applyLocalFilter(buf, { style = IMG_STYLE, strength = IMG_FILTER_STRENGTH } = {}) {
   const img = await Jimp.read(buf);
   const w = img.getWidth(), h = img.getHeight();
@@ -544,7 +617,6 @@ async function applyLocalFilter(buf, { style = IMG_STYLE, strength = IMG_FILTER_
           : (strength === 'low')  ? { c: 0.06, br: 0.010, sat:  6, o1: 0.08, o2: 0.06, noise: 1 }
                                   : { c: 0.12, br: 0.020, sat: 10, o1: 0.14, o2: 0.10, noise: 2 };
 
-  // Базовые правки
   img.contrast(s.c).brightness(s.br);
   if (style !== 'bw' && style !== 'noir') {
     img.color([{ apply: 'saturate', params: [s.sat] }]);
@@ -566,7 +638,6 @@ async function applyLocalFilter(buf, { style = IMG_STYLE, strength = IMG_FILTER_
     img.greyscale().contrast(0.12);
   }
 
-  // Лёгкое зерно (если доступно)
   if (typeof img.noise === 'function') {
     img.noise(s.noise);
   } else {
@@ -680,14 +751,9 @@ function isBusy(chatId) { return BUSY.has(chatId); }
 
 // --- Убираем инлайн-клавиатуру у сообщения с кнопками ---
 async function freezeButtons(ctx, toast = 'Обрабатываю…') {
-  // короткий тост в шторке
   await ctx.answerCbQuery(toast).catch(() => {});
-  // попытка убрать inline-клавиатуру у того сообщения, на котором нажали кнопку
-  try {
-    await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
-  } catch (e) {
-    log('ui.freezeButtons.error', { error: e.message });
-  }
+  try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); }
+  catch (e) { log('ui.freezeButtons.error', { error: e.message }); }
 }
 
 // Память активных предложений
@@ -738,11 +804,9 @@ bot.action(/publish:(.+)/, async (ctx) => {
   try {
     await ctx.reply('⏳ Публикуем запись…');
     await publishToChannel(ctx, offer.item, offer.keys);
-    // после успешной публикации кнопки уже убраны; даём подтверждение
     await ctx.reply('✅ Опубликовано в канале.');
   } catch (e) {
-   // publishToChannel сам пишет об ошибке; здесь только лог и продолжение
-   log('ui.publish.catch', { error: e.message });
+    log('ui.publish.catch', { error: e.message });
   } finally {
     await offerNext(ctx);
     setBusy(chatId, false);
@@ -822,7 +886,7 @@ async function offerNext(ctx) {
 async function publishToChannel(ctx, item, keys) {
   log('publish.begin', { id: keys.id, source: item.source, link: item.link });
   try {
-    // 1) Текст -> получаем новый заголовок + тело
+    // 1) Текст -> новый заголовок + тело
     const plain = (item.contentSnippet || stripHtml(item.content || '')).trim();
     const rewrittenRaw = await openaiChatRewrite({ title: item.title || '', plain, link: item.link || '' });
     const { title: newTitle, body: rewrittenBody } = splitTitleFromBody(rewrittenRaw);
@@ -847,10 +911,10 @@ async function publishToChannel(ctx, item, keys) {
         // OpenAI edits: 1024×1024
         const edited = await openaiEditBackground(png);
 
-        // Базовый кандидат: edited если удалось, иначе оригинал PNG
+        // Базовый кандидат
         let candidate = edited || png;
 
-        // Растягиваем квадрат до точных исходных W×H (без белых полей)
+        // Растягиваем квадрат до точных исходных W×H
         let stretched = await stretchToOriginalSize(candidate, w, h).catch(e => {
           log('img.stretchToOriginal.error', { error: e.message });
           return candidate;
@@ -869,10 +933,10 @@ async function publishToChannel(ctx, item, keys) {
           log('img.diff.error', { error: e.message });
         }
 
-        // Гарантируем структурное отличие по dHash
+        // Гарантируем отличие по dHash + pHash, при необходимости — variations
         let structural = stretched;
         try {
-          if (IMG_ENSURE_STRUCT) structural = await ensureStructDiff(png, stretched, w, h);
+          if (IMG_ENSURE_STRUCT) structural = await ensureDistinctEnough(png, stretched, w, h);
         } catch (e) { log('img.struct.error', { error: e.message }); }
 
         finalBuf = structural;
@@ -884,7 +948,7 @@ async function publishToChannel(ctx, item, keys) {
 
       mediaGroup.push({
         type: 'photo',
-        media: { source: finalBuf, filename: `photo_${i + 1}.png` } // соответствует PNG-контенту
+        media: { source: finalBuf, filename: `photo_${i + 1}.png` }
       });
     }
     log('publish.mediaGroup.ready', { photos: mediaGroup.length });
@@ -916,8 +980,6 @@ async function publishToChannel(ctx, item, keys) {
     // 5) Статус posted
     markPosted(item, keys);
     log('publish.ok', { id: keys.id });
-
-    // 6) Следующая карточка
   } catch (e) {
     log('publish.error', { error: e.message });
 
@@ -938,9 +1000,7 @@ async function publishToChannel(ctx, item, keys) {
 
 function buildCaption(title, body) {
   const cap = `<b>${escapeHtml(title)}</b>\n\n${escapeHtml(body)}`;
-  if (cap.length > 1000) {
-    log('caption.truncate', { from: cap.length, to: 1000 });
-  }
+  if (cap.length > 1000) log('caption.truncate', { from: cap.length, to: 1000 });
   return cap.length > 1000 ? cap.slice(0, 997) + '…' : cap;
 }
 
@@ -975,7 +1035,6 @@ async function verifyChannelAccess(bot) {
     await bot.launch();
     log('bot.launch.ok', { feeds: FEED_URLS.length, store: STORE_PATH, log: LOG_PATH });
 
-    // Проверим доступ к каналу один раз при старте
     await verifyChannelAccess(bot);
 
     console.log('Бот запущен. Напишите ему /start');
