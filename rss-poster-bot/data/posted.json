@@ -167,6 +167,126 @@
       "isoDate": "2025-09-12T09:50:40.000Z",
       "status": "offered",
       "offeredAt": "2025-09-12T10:37:46.816Z"
+    },
+    "id:https://t.me/nexpertGM/11708": {
+      "id": "https://t.me/nexpertGM/11708",
+      "link": "https://t.me/nexpertGM/11708",
+      "source": "nexpertGM",
+      "isoDate": "2025-09-12T09:05:49.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-12T11:23:53.307Z"
+    },
+    "uh:75eacc03424212024e5f90833bfff44988145f57f7f8b22bf92657f4a06a5257": {
+      "id": "https://t.me/nexpertGM/11708",
+      "link": "https://t.me/nexpertGM/11708",
+      "source": "nexpertGM",
+      "isoDate": "2025-09-12T09:05:49.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-12T11:23:53.307Z"
+    },
+    "ch:b0153f296e6093429ba86b8f3a80c8ed12efed6c4c8c458c620c65989fd71919": {
+      "id": "https://t.me/nexpertGM/11708",
+      "link": "https://t.me/nexpertGM/11708",
+      "source": "nexpertGM",
+      "isoDate": "2025-09-12T09:05:49.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-12T11:23:53.307Z"
+    },
+    "id:https://t.me/anrbc/12953": {
+      "id": "https://t.me/anrbc/12953",
+      "link": "https://t.me/anrbc/12953",
+      "source": "anrbc",
+      "isoDate": "2025-09-12T08:47:45.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-12T11:24:09.179Z"
+    },
+    "uh:908bdc4f20fe3299a7326ba884fec6ccb12f095585fd10e865a7555c3262cb8b": {
+      "id": "https://t.me/anrbc/12953",
+      "link": "https://t.me/anrbc/12953",
+      "source": "anrbc",
+      "isoDate": "2025-09-12T08:47:45.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-12T11:24:09.179Z"
+    },
+    "ch:83490d3c3f121c14d3c7eb50f44f5769a6a202119a5a643cb5d8d6857fb2950a": {
+      "id": "https://t.me/anrbc/12953",
+      "link": "https://t.me/anrbc/12953",
+      "source": "anrbc",
+      "isoDate": "2025-09-12T08:47:45.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-12T11:24:09.179Z"
+    },
+    "id:https://t.me/drom/31906": {
+      "id": "https://t.me/drom/31906",
+      "link": "https://t.me/drom/31906",
+      "source": "drom",
+      "isoDate": "2025-09-12T08:03:25.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-12T11:25:05.954Z"
+    },
+    "uh:74fd62a51ac5941b0c294a5686170f9f16c1a4b9343470b89b028f71904f346d": {
+      "id": "https://t.me/drom/31906",
+      "link": "https://t.me/drom/31906",
+      "source": "drom",
+      "isoDate": "2025-09-12T08:03:25.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-12T11:25:05.954Z"
+    },
+    "ch:dcb6949e594cb96ec66eba419fd322b925630cd7662d5d24664e7599f5a61d39": {
+      "id": "https://t.me/drom/31906",
+      "link": "https://t.me/drom/31906",
+      "source": "drom",
+      "isoDate": "2025-09-12T08:03:25.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-12T11:25:05.954Z"
+    },
+    "id:https://t.me/drom/31903": {
+      "id": "https://t.me/drom/31903",
+      "link": "https://t.me/drom/31903",
+      "source": "drom",
+      "isoDate": "2025-09-12T06:30:27.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-12T11:26:15.068Z"
+    },
+    "uh:6bc165bb66f637a4785d8ee8cc4da704014e9b7a04bdc178271c7866a49d02b7": {
+      "id": "https://t.me/drom/31903",
+      "link": "https://t.me/drom/31903",
+      "source": "drom",
+      "isoDate": "2025-09-12T06:30:27.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-12T11:26:15.068Z"
+    },
+    "ch:7ce4b543ddb183cd2b5e2ecdb1a2b8218d313041e8884c7419d1a37b7fa8ea27": {
+      "id": "https://t.me/drom/31903",
+      "link": "https://t.me/drom/31903",
+      "source": "drom",
+      "isoDate": "2025-09-12T06:30:27.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-12T11:26:15.068Z"
+    },
+    "id:https://t.me/nexpertGM/11707": {
+      "id": "https://t.me/nexpertGM/11707",
+      "link": "https://t.me/nexpertGM/11707",
+      "source": "nexpertGM",
+      "isoDate": "2025-09-12T06:05:48.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-12T11:26:28.982Z"
+    },
+    "uh:cafec734374e0340a95a4d57f1bc3d561ba2dd266dbe1d645c654209c51e78ab": {
+      "id": "https://t.me/nexpertGM/11707",
+      "link": "https://t.me/nexpertGM/11707",
+      "source": "nexpertGM",
+      "isoDate": "2025-09-12T06:05:48.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-12T11:26:28.982Z"
+    },
+    "ch:222b44b3237b2afc1eda7c7da3d28d026895d4f42a5158cd97d4c4f52d419bcd": {
+      "id": "https://t.me/nexpertGM/11707",
+      "link": "https://t.me/nexpertGM/11707",
+      "source": "nexpertGM",
+      "isoDate": "2025-09-12T06:05:48.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-12T11:26:28.982Z"
     }
   }
 }

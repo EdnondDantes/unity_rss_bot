@@ -34,7 +34,7 @@ const TEXT_PROMPT = `
 - Единый стиль чисел/единиц.
 - Без тавтологии и канцелярита.
 ДЛИНА:
--  не больше 800 символов.(включая пробелы и переносы строк)
+-  не больше 750 символов.(включая пробелы и переносы строк)
 ПРОВЕРКИ:
 - Совпадение фактов/чисел.
 - Антиплагиат: иной порядок/формулировки.
@@ -123,6 +123,9 @@ const IMG_AHASH_MIN_DIST = Number(process.env.IMG_AHASH_MIN_DIST || 10);
 const IMG_DHASH_MIN_DIST = Number(process.env.IMG_DHASH_MIN_DIST || 12);
 const IMG_PHASH_DCT_MIN_DIST = Number(process.env.IMG_PHASH_DCT_MIN_DIST || 10);
 
+// Минимальный размер изображений для публикации (чтобы отсечь аватарки/иконки)
+const MIN_IMAGE_DIM = Number(process.env.MIN_IMAGE_DIM || 200);
+
 log('config.load.begin');
 log('config.values', {
   node: process.version,
@@ -146,7 +149,8 @@ log('config.values', {
   img_struct_tries: IMG_STRUCT_TRIES,
   ahash_min: IMG_AHASH_MIN_DIST,
   dhash_min: IMG_DHASH_MIN_DIST,
-  phash_min: IMG_PHASH_DCT_MIN_DIST
+  phash_min: IMG_PHASH_DCT_MIN_DIST,
+  min_image_dim: MIN_IMAGE_DIM
 });
 
 if (!BOT_TOKEN || !CHANNEL_ID || !OPENAI_API_KEY || PARSE_CHANNELS.length === 0) {
@@ -312,17 +316,26 @@ function parseTMeMessages(username, html) {
     const textHtml = $el.find('.tgme_widget_message_text').html() || '';
     const textPlain = $el.find('.tgme_widget_message_text').text().replace(/\s+/g, ' ').trim();
 
-    // Изображения: из background-image и <img>
+    // === Изображения из контент-зоны ===
+    // 1) Фото-вложения (background-image на ссылке)
     const imgs = new Set();
     $el.find('a.tgme_widget_message_photo_wrap').each((__, a) => {
       const style = $(a).attr('style') || '';
       const m = style.match(/url\(['"]?(.*?)['"]?\)/i);
       if (m && m[1]) imgs.add(m[1]);
     });
-    $el.find('img').each((__, img) => {
-      const src = $(img).attr('src');
+
+    // 2) Картинки ВНУТРИ контента (текст поста, превью ссылок и т.п.)
+    // Исключаем любые изображения из блока пользователя/аватара/реакций/эмодзи.
+    $el.find('.tgme_widget_message_text img, .tgme_widget_message_link_preview img, .tgme_widget_message_photo_wrap img').each((__, img) => {
+      const $img = $(img);
+      const cls = ($img.attr('class') || '').toLowerCase();
+      if (/user|avatar|emoji|sticker|reaction/.test(cls)) return;
+      if ($img.closest('.tgme_widget_message_user, .tgme_widget_message_user_photo, .tgme_widget_message_author').length) return;
+      const src = $img.attr('src');
       if (src && /^https?:\/\//.test(src)) imgs.add(src);
     });
+
     const imgHtml = Array.from(imgs).map(u => `<p><img src="${u}" alt="photo"/></p>`).join('');
 
     const id = link || ($el.attr('data-post') ? `https://t.me/${$el.attr('data-post')}` : '');
@@ -443,14 +456,12 @@ function hamming(a, b) {
 
 async function getGrayRaw(buf, w, h) {
   const { data, info } = await sharp(buf)
-    .rotate() // применяем EXIF-ориентацию
+    .rotate()
     .toColourspace('b-w')
     .resize(w, h, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
     .raw()
     .toBuffer({ resolveWithObject: true });
-  // data — Uint8Array длиной w*h (1 канал)
   if (info.channels !== 1) {
-    // на всякий случай приведём к 1 каналу
     const g = [];
     for (let i = 0; i < data.length; i += info.channels) g.push(data[i]);
     return Uint8Array.from(g);
@@ -458,7 +469,6 @@ async function getGrayRaw(buf, w, h) {
   return data;
 }
 
-// aHash: 8x8, порог по среднему
 async function aHash64(buf) {
   const W = 8, H = 8;
   const g = await getGrayRaw(buf, W, H);
@@ -467,10 +477,9 @@ async function aHash64(buf) {
   const avg = sum / g.length;
   let bits = '';
   for (let i = 0; i < g.length; i++) bits += (g[i] >= avg ? '1' : '0');
-  return bits; // 64 бита
+  return bits;
 }
 
-// dHash: 9x8, сравнение по горизонтали
 async function dHash64(buf) {
   const W = 9, H = 8;
   const g = await getGrayRaw(buf, W, H);
@@ -481,14 +490,12 @@ async function dHash64(buf) {
       bits += (g[rowOff + x] > g[rowOff + x + 1]) ? '1' : '0';
     }
   }
-  return bits; // 64 бита
+  return bits;
 }
 
-// pHash: 32x32 -> DCT -> верхний 8x8 (кроме DC), порог по медиане
 async function pHash64(buf) {
   const N = 32;
   const g = await getGrayRaw(buf, N, N);
-  // нормируем 0..1
   const f = new Array(N * N);
   for (let i = 0; i < N * N; i++) f[i] = g[i] / 255;
 
@@ -516,7 +523,7 @@ async function pHash64(buf) {
   const median = sorted[Math.floor(sorted.length/2)];
   let bits = '';
   for (const c of coeffs) bits += (c > median ? '1' : '0');
-  return bits; // 63 бита
+  return bits;
 }
 
 async function hashDistances(origBuf, candBuf) {
@@ -532,8 +539,9 @@ async function hashDistances(origBuf, candBuf) {
 // ----------------- Изображения на sharp -----------------
 async function toPngKeepSize(buffer) {
   try {
-    const meta = await sharp(buffer).rotate().metadata(); // rotate() применяет EXIF
-    const out = await sharp(buffer).rotate().png({ compressionLevel: 9, quality: 100 }).toBuffer();
+    const rotated = sharp(buffer).rotate();
+    const meta = await rotated.metadata();
+    const out = await rotated.png({ compressionLevel: 9, quality: 100 }).toBuffer();
     log('img.toPngKeepSize.done', { w: meta.width, h: meta.height, out_size: out.length });
     return { png: out, w: meta.width, h: meta.height };
   } catch (e) {
@@ -542,7 +550,6 @@ async function toPngKeepSize(buffer) {
   }
 }
 
-// Лёгкая цветокоррекция без деградации
 async function applyLocalFilterSharp(buf, { style = IMG_STYLE, strength = IMG_FILTER_STRENGTH } = {}) {
   if (style === 'none') return buf;
 
@@ -599,8 +606,8 @@ async function makeRadialVignette(W, H, alpha = 0.18) {
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const dx = x - cx, dy = y - cy;
-      const r = Math.sqrt(dx * dx + dy * dy) / maxR; // 0..1
-      const v = Math.max(0, Math.min(1, (r - 0.6) / 0.4)); // 0..1 к краям
+      const r = Math.sqrt(dx * dx + dy * dy) / maxR;
+      const v = Math.max(0, Math.min(1, (r - 0.6) / 0.4));
       const k = Math.floor(255 * v * alpha);
       const idx = (y * W + x) * 4;
       buf[idx + 0] = 0;
@@ -612,23 +619,20 @@ async function makeRadialVignette(W, H, alpha = 0.18) {
   return await sharp(buf, { raw: { width: W, height: H, channels: 4 } }).png().toBuffer();
 }
 
-// Структурная модификация без деградации: кроп (0.92–0.98), LANCZOS3, смещение на блюр-фон, опциональный горизонтальный flop
 async function structuralAugmentSharp(origBuf, W, H) {
-  const base = sharp(origBuf).rotate(); // учитываем EXIF
+  const base = sharp(origBuf).rotate();
   const meta = await base.metadata();
   const srcW = meta.width, srcH = meta.height;
 
-  const mirror = Math.random() < IMG_FLIP_PROB; // только горизонтально (не flip)
+  const mirror = Math.random() < IMG_FLIP_PROB;
   const basePrepared = mirror ? base.clone().flop() : base.clone();
 
-  // Фон: блюр в целевом размере
   const bg = await base.clone()
     .resize(W, H, { fit: 'cover', kernel: sharp.kernel.lanczos3 })
     .blur(8)
     .png()
     .toBuffer();
 
-  // Случайный кроп без изменения пропорций
   const cropK = IMG_CROP_MIN + Math.random() * (IMG_CROP_MAX - IMG_CROP_MIN);
   const cw = Math.max(8, Math.floor(srcW * cropK));
   const ch = Math.max(8, Math.floor(srcH * cropK));
@@ -637,7 +641,6 @@ async function structuralAugmentSharp(origBuf, W, H) {
   const left = Math.floor(Math.random() * (maxX + 1));
   const top = Math.floor(Math.random() * (maxY + 1));
 
-  // Маленький наклон, но не «вверх ногами»
   const angle = IMG_ROTATE_MAX_DEG > 0 ? (Math.random() * 2 - 1) * IMG_ROTATE_MAX_DEG : 0;
 
   const cropBuf = await basePrepared
@@ -652,17 +655,14 @@ async function structuralAugmentSharp(origBuf, W, H) {
   const newW = cropMeta.width;
   const newH = cropMeta.height;
 
-  // Случайный оффсет на канвасе
   const ox = Math.floor((W - newW) * Math.random());
   const oy = Math.floor((H - newH) * Math.random());
 
-  // Сборка
   const composed = await sharp(bg)
     .composite([{ input: cropBuf, left: ox, top: oy }])
     .png({ compressionLevel: 9, quality: 100 })
     .toBuffer();
 
-  // Лёгкая виньетка
   const vignetteAlpha = 0.18;
   const vignette = await makeRadialVignette(W, H, vignetteAlpha);
   const withVignette = await sharp(composed)
@@ -673,7 +673,6 @@ async function structuralAugmentSharp(origBuf, W, H) {
   return withVignette;
 }
 
-// Обеспечить «непохожесть» по всем 3 хэшам, сохраняя W×H и высокое качество
 async function ensureDistinctEnoughSharp(origPng, W, H) {
   if (!IMG_REQUIRE_ORIGINALITY) return origPng;
 
@@ -935,7 +934,7 @@ async function publishToChannel(ctx, item, keys) {
     const { title: newTitle, body: rewrittenBody } = splitTitleFromBody(rewrittenRaw);
     const finalTitle = newTitle || (item.title || '(без заголовка)');
 
-    // 2) Картинки
+    // 2) Картинки из контента (уже без аватарок)
     const imgUrls = extractImagesFromContent(item.content || '').slice(0, MAX_PHOTOS);
     log('publish.images', { count: imgUrls.length });
 
@@ -947,6 +946,13 @@ async function publishToChannel(ctx, item, keys) {
 
       try {
         const { png, w, h } = await toPngKeepSize(buf);
+
+        // Доп. фильтр от мелких изображений (типичные аватарки/иконки)
+        if ((w < MIN_IMAGE_DIM) && (h < MIN_IMAGE_DIM)) {
+          log('publish.image.skip.too_small', { url: trunc(url, 160), w, h, min: MIN_IMAGE_DIM });
+          continue;
+        }
+
         const distinct = await ensureDistinctEnoughSharp(png, w, h);
 
         // опционально ещё лёгкая фильтрация (если стиль задан)
@@ -958,7 +964,14 @@ async function publishToChannel(ctx, item, keys) {
         });
       } catch (e) {
         log('publish.image.error', { error: e.message, url: trunc(url, 180) });
-        // Фоллбек — отдать как есть
+        // Фоллбек — отдать как есть, но тоже отсечём очень мелкие
+        try {
+          const meta = await sharp(buf).metadata();
+          if ((meta.width < MIN_IMAGE_DIM) && (meta.height < MIN_IMAGE_DIM)) {
+            log('publish.image.fallback.skip.too_small', { w: meta.width, h: meta.height, min: MIN_IMAGE_DIM });
+            continue;
+          }
+        } catch {}
         mediaGroup.push({
           type: 'photo',
           media: { source: buf, filename: `photo_${i + 1}.png` }
