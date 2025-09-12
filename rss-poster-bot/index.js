@@ -14,8 +14,9 @@ const TEXT_PROMPT = `
 5) Ссылки из SOURCE_TEXT сохрани как Markdown [якорь](URL).
 6) Дополняй только общеизвестным контекстом; избегай спекуляций.
 7) Названия/индексы перепроверяй; не искажай.
+8) НИКОГДА не используй исходный заголовок. Заголовок всегда новый.
 СТРУКТУРА ВЫХОДА:
-1) Заголовок (H2) С ярким хуком. ≤ 60 знаков.
+1) Ровно ОДИН заголовок (H2), начинай строкой: "## ". Хук, ≤ 60 знаков. Заголовок не повторяется в теле.
 2) 3–6 коротких абзацев по 1–2 строки:
    • что нового/что произошло;
    • ключевые характеристики/изменения/комплектации (точно сохранённые цифры);
@@ -34,7 +35,7 @@ const TEXT_PROMPT = `
 - Единый стиль чисел/единиц.
 - Без тавтологии и канцелярита.
 ДЛИНА:
--  не больше 750 символов.(включая пробелы и переносы строк)
+-  не больше 750 символов (включая пробелы и переносы строк). Не перебирать лимит.
 ПРОВЕРКИ:
 - Совпадение фактов/чисел.
 - Антиплагиат: иной порядок/формулировки.
@@ -126,6 +127,13 @@ const IMG_PHASH_DCT_MIN_DIST = Number(process.env.IMG_PHASH_DCT_MIN_DIST || 10);
 // Минимальный размер изображений для публикации (чтобы отсечь аватарки/иконки)
 const MIN_IMAGE_DIM = Number(process.env.MIN_IMAGE_DIM || 200);
 
+// Лимиты подписи Telegram
+const TG_CAPTION_MAX = 1024; // фактический лимит подписи для mediaGroup
+const CAPTION_SAFE = Math.min(
+  Number(process.env.CAPTION_MAX || (TG_CAPTION_MAX - 8)),
+  TG_CAPTION_MAX
+);
+
 log('config.load.begin');
 log('config.values', {
   node: process.version,
@@ -150,7 +158,8 @@ log('config.values', {
   ahash_min: IMG_AHASH_MIN_DIST,
   dhash_min: IMG_DHASH_MIN_DIST,
   phash_min: IMG_PHASH_DCT_MIN_DIST,
-  min_image_dim: MIN_IMAGE_DIM
+  min_image_dim: MIN_IMAGE_DIM,
+  caption_safe: CAPTION_SAFE
 });
 
 if (!BOT_TOKEN || !CHANNEL_ID || !OPENAI_API_KEY || PARSE_CHANNELS.length === 0) {
@@ -253,6 +262,67 @@ function toTs(s) {
   const out = Number.isFinite(t) ? t : 0;
   log('time.parse', { s, ts: out });
   return out;
+}
+
+// --- Нормализация строки для сравнения (срезаем эмодзи/знаки/многопробел) ---
+function normalizeForCompare(s = '') {
+  return (s || '')
+    .toLowerCase()
+    .replace(/[#*_`~>|]/g, ' ')
+    .replace(/[^\p{L}\p{N}\s.-]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// --- Удалить из начала body возможный повтор заголовка ---
+function stripLeadingTitle(body = '', title = '') {
+  if (!body) return '';
+  const lines = body.split(/\r?\n/);
+  // убрать Markdown-заголовки в самом начале
+  while (lines.length && /^#{1,6}\s+/.test(lines[0])) lines.shift();
+  if (!title) return lines.join('\n').trim();
+  const normTitle = normalizeForCompare(title);
+  while (lines.length) {
+    const normLine = normalizeForCompare(lines[0]);
+    // если первая строка почти совпадает с заголовком — выкинуть
+    if (normLine && (normLine === normTitle || normLine.startsWith(normTitle.slice(0, Math.max(10, Math.floor(normTitle.length * 0.8)))))) {
+      lines.shift();
+      continue;
+    }
+    break;
+  }
+  return lines.join('\n').trim();
+}
+
+// --- Сформировать новый заголовок из plain-текста (не из исходного title) ---
+function makeTitleFromPlain(plain = '') {
+  const txt = (plain || '').replace(/\s+/g, ' ').trim();
+  if (!txt) return 'Коротко об авто-новости';
+  const m = txt.match(/^(.{20,80}?)([.!?–—]|$)/);
+  let t = (m ? m[1] : txt.slice(0, 80)).trim();
+  t = t.replace(/[,:;–—-]\s*$/, '').replace(/\s{2,}/g, ' ');
+  if (t.length > 60) t = t.slice(0, 57).trim() + '…';
+  return t;
+}
+
+// --- Умное обрезание подписи под лимит Telegram ---
+function smartTruncate(s = '', limit = CAPTION_SAFE) {
+  if (!s || s.length <= limit) return s;
+  const slice = s.slice(0, Math.max(0, limit - 1));
+  // ищем последний «красивый» разделитель
+  const idx = Math.max(
+    slice.lastIndexOf('. '),
+    slice.lastIndexOf('! '),
+    slice.lastIndexOf('? '),
+    slice.lastIndexOf('\n'),
+    slice.lastIndexOf(' — '),
+    slice.lastIndexOf(' – '),
+    slice.lastIndexOf(' - '),
+    slice.lastIndexOf(' ')
+  );
+  let cut = idx > 0 ? slice.slice(0, idx) : slice;
+  cut = cut.replace(/[ \t\r\n.!,;:—–-]+$/g, '');
+  return cut + '…';
 }
 
 // ----------------- Парсинг Telegram (без RSSHub) -----------------
@@ -425,9 +495,12 @@ async function openaiChatRewrite({ title, plain, link }) {
     return text;
   } catch (e) {
     log('openai.chat.error', { error: e.message });
-    const fallback = `${title}\n\n${plain}\n\nИсточник: ${link}`;
-    log('openai.chat.fallback', { out_len: fallback.length });
-    return fallback.slice(0, 980);
+    // Фолбэк: новый H2 + тело из plain, без исходного заголовка
+    const safePlain = (plain || '').replace(/\s+/g, ' ').trim();
+    const h2 = makeTitleFromPlain(safePlain);
+    const md = `## ${h2}\n\n${safePlain}`;
+    log('openai.chat.fallback', { out_len: md.length });
+    return md;
   }
 }
 
@@ -441,6 +514,8 @@ function splitTitleFromBody(markdown = '') {
     if (m) { title = m[1].trim(); idx = i; break; }
   }
   if (idx >= 0) lines.splice(idx, 1);
+  // убрать случайные повторные Hx в самом начале
+  while (lines.length && /^#{1,6}\s+/.test(lines[0])) lines.shift();
   const body = lines.join('\n').trim();
   log('rewrite.parse', { has_h2: Boolean(title), title_sample: trunc(title, 80) });
   return { title, body };
@@ -932,7 +1007,8 @@ async function publishToChannel(ctx, item, keys) {
     const plain = (item.contentSnippet || stripHtml(item.content || '')).trim();
     const rewrittenRaw = await openaiChatRewrite({ title: item.title || '', plain, link: item.link || '' });
     const { title: newTitle, body: rewrittenBody } = splitTitleFromBody(rewrittenRaw);
-    const finalTitle = newTitle || (item.title || '(без заголовка)');
+    // Никогда не используем исходный item.title как заголовок публикации
+    const finalTitle = newTitle || makeTitleFromPlain(plain);
 
     // 2) Картинки из контента (уже без аватарок)
     const imgUrls = extractImagesFromContent(item.content || '').slice(0, MAX_PHOTOS);
@@ -980,7 +1056,7 @@ async function publishToChannel(ctx, item, keys) {
     }
     log('publish.mediaGroup.ready', { photos: mediaGroup.length });
 
-    // 3) Подпись — используем НОВЫЙ заголовок
+    // 3) Подпись — используем НОВЫЙ заголовок и чистое тело
     const caption = buildCaption(finalTitle, rewrittenBody || rewrittenRaw);
     log('publish.caption', { len: caption.length, sample: trunc(caption, 200) });
 
@@ -1026,9 +1102,23 @@ async function publishToChannel(ctx, item, keys) {
 }
 
 function buildCaption(title, body) {
-  const cap = `<b>${escapeHtml(title)}</b>\n\n${escapeHtml(body)}`;
-  if (cap.length > 1000) log('caption.truncate', { from: cap.length, to: 1000 });
-  return cap.length > 1000 ? cap.slice(0, 997) + '…' : cap;
+  let cleanBody = stripLeadingTitle(body || '', title || '');
+  const head = `<b>${escapeHtml(title)}</b>\n\n`;
+  let tail = escapeHtml(cleanBody);
+
+  let cap = head + tail;
+  if (cap.length > CAPTION_SAFE) {
+    // обрежем только tail «красиво», head оставим
+    const need = CAPTION_SAFE - head.length;
+    if (need > 0) {
+      tail = smartTruncate(tail, need);
+      cap = head + tail;
+    } else {
+      cap = smartTruncate(head, CAPTION_SAFE);
+    }
+    log('caption.truncate', { to: cap.length });
+  }
+  return cap;
 }
 
 // ----------------- Проверка доступа к каналу -----------------
