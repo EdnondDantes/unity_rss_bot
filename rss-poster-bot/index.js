@@ -34,7 +34,7 @@ const TEXT_PROMPT = `
 - Единый стиль чисел/единиц.
 - Без тавтологии и канцелярита.
 ДЛИНА:
-- short: ~120–180 слов; medium: ~220–350 слов.
+- ~120–180 слов, не больше 800 символов.
 ПРОВЕРКИ:
 - Совпадение фактов/чисел.
 - Антиплагиат: иной порядок/формулировки.
@@ -42,18 +42,18 @@ const TEXT_PROMPT = `
 - Ясность и читабельность.
 `;
 // index.js — Node 16
-// deps: telegraf@4, node-fetch@2, form-data@4, cheerio@1, jimp@0.22, dotenv
-// Новое: прямой парсинг https://t.me/s/<username>, без RSSHub. Берём 3 свежие из каждого канала.
+// deps: telegraf@4, node-fetch@2, cheerio@1, sharp@0.32, dotenv
+//
+// npm i telegraf@4 node-fetch@2 cheerio@1 sharp@0.32 dotenv
 
 require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const fetch = require('node-fetch'); // v2 для Node 16
-const FormData = require('form-data');
+const sharp = require('sharp');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const cheerio = require('cheerio');
-const Jimp = require('jimp');
 
 // ----------------- Утилиты -----------------
 const DATA_DIR = path.join(__dirname, 'data');
@@ -82,17 +82,18 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHANNEL_ID = process.env.CHANNEL_ID; // @username или -100...
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com').replace(/\/+$/,'');
+
 // Новое: список каналов (юзернеймы или ссылки t.me/...); если нет — подставим твои 5 каналов
 const CHANNELS = (process.env.CHANNELS || '')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
 const DEFAULT_CHANNELS = [
+  't.me/avtonovosti_rus',
   't.me/AutoDrajv',
   't.me/drom',
   't.me/anrbc',
   't.me/nexpertGM',
-  't.me/avtonovosti_rus'
 ];
 const PARSE_CHANNELS = (CHANNELS.length ? CHANNELS : DEFAULT_CHANNELS)
   .map(s => s.replace(/^https?:\/\/t\.me\/(s\/)?/i, ''))
@@ -103,24 +104,22 @@ const PARSE_CHANNELS = (CHANNELS.length ? CHANNELS : DEFAULT_CHANNELS)
 const MAX_PHOTOS = Math.min(Number(process.env.MAX_PHOTOS || 10), 10);
 const FEED_DELAY_MS = Number(process.env.FEED_DELAY_MS || 3000); // пауза между каналами (вежливость)
 
-// Параметры обработки изображений
-const IMG_STYLE = (process.env.IMG_STYLE || 'cinematic').toLowerCase(); // cinematic|vivid|matte|noir|bw
+// === Параметры обработки изображений (SHARP, без OpenAI) ===
+const IMG_STYLE = (process.env.IMG_STYLE || 'none').toLowerCase(); // none|cinematic|vivid|matte|noir|bw
 const IMG_FILTER_STRENGTH = (process.env.IMG_FILTER_STRENGTH || 'medium').toLowerCase(); // low|medium|high
-const IMG_DIFF_THRESHOLD = Number(process.env.IMG_DIFF_THRESHOLD || 0.04); // 0..1 — «слишком похоже»
-const IMG_ALWAYS_LOCAL_FILTER = process.env.IMG_ALWAYS_LOCAL_FILTER === '1';
+const IMG_REQUIRE_ORIGINALITY = process.env.IMG_REQUIRE_ORIGINALITY === '0' ? false : true;
 
-// --- Новые параметры для структурных отличий / variations ---
-const IMG_ENSURE_STRUCT = process.env.IMG_ENSURE_STRUCT === '0' ? false : true; // включено по умолчанию
-// Пороги «непохожести» по хэшам (0..64); совместимость с старым IMG_PHASH_MIN_DIST
-const IMG_DHASH_MIN_DIST = Number(process.env.IMG_DHASH_MIN_DIST || process.env.IMG_PHASH_MIN_DIST || 12); // dHash
-const IMG_PHASH_DCT_MIN_DIST = Number(process.env.IMG_PHASH_DCT_MIN_DIST || 10); // pHash(DCT)
-const IMG_ROTATE_MAX_DEG = Number(process.env.IMG_ROTATE_MAX_DEG || 5.0); // ±градусов
-const IMG_FLIP_PROB = Number(process.env.IMG_FLIP_PROB || 0.5); // вероятность горизонтального флипа
-const IMG_CROP_MIN = Number(process.env.IMG_CROP_MIN || 0.88);  // доля стороны при кропе
-const IMG_CROP_MAX = Number(process.env.IMG_CROP_MAX || 0.96);
-const IMG_STRUCT_TRIES = Number(process.env.IMG_STRUCT_TRIES || 3); // попыток добиться дистанции
-const IMG_ALLOW_VARIATIONS = process.env.IMG_ALLOW_VARIATIONS === '0' ? false : true; // разрешить /v1/images/variations
-const IMG_VARIATION_TRIES = Number(process.env.IMG_VARIATION_TRIES || 1);
+// «Структура»: кроп/смещение/горизонтальное зеркало (без переворота вверх-вниз)
+const IMG_FLIP_PROB = Number(process.env.IMG_FLIP_PROB || 0.35); // вероятность горизонтального зеркала (flop)
+const IMG_CROP_MIN = Number(process.env.IMG_CROP_MIN || 0.92);  // доля стороны при кропе
+const IMG_CROP_MAX = Number(process.env.IMG_CROP_MAX || 0.98);
+const IMG_ROTATE_MAX_DEG = Number(process.env.IMG_ROTATE_MAX_DEG || 3.0); // случайный наклон ±N°
+const IMG_STRUCT_TRIES = Number(process.env.IMG_STRUCT_TRIES || 4); // попыток добиться дистанции
+
+// Пороги непохожести по хэшам (0..64)
+const IMG_AHASH_MIN_DIST = Number(process.env.IMG_AHASH_MIN_DIST || 10);
+const IMG_DHASH_MIN_DIST = Number(process.env.IMG_DHASH_MIN_DIST || 12);
+const IMG_PHASH_DCT_MIN_DIST = Number(process.env.IMG_PHASH_DCT_MIN_DIST || 10);
 
 log('config.load.begin');
 log('config.values', {
@@ -134,20 +133,18 @@ log('config.values', {
   log_to_file: LOG_TO_FILE,
   max_photos: MAX_PHOTOS,
   feed_delay_ms: FEED_DELAY_MS,
+  // image cfg
   img_style: IMG_STYLE,
   img_strength: IMG_FILTER_STRENGTH,
-  img_diff_threshold: IMG_DIFF_THRESHOLD,
-  img_always_local_filter: IMG_ALWAYS_LOCAL_FILTER,
-  img_ensure_struct: IMG_ENSURE_STRUCT,
-  img_dhash_min_dist: IMG_DHASH_MIN_DIST,
-  img_phash_dct_min_dist: IMG_PHASH_DCT_MIN_DIST,
-  img_rotate_max_deg: IMG_ROTATE_MAX_DEG,
+  img_require_originality: IMG_REQUIRE_ORIGINALITY,
   img_flip_prob: IMG_FLIP_PROB,
   img_crop_min: IMG_CROP_MIN,
   img_crop_max: IMG_CROP_MAX,
+  img_rotate_max_deg: IMG_ROTATE_MAX_DEG,
   img_struct_tries: IMG_STRUCT_TRIES,
-  img_allow_variations: IMG_ALLOW_VARIATIONS,
-  img_variation_tries: IMG_VARIATION_TRIES
+  ahash_min: IMG_AHASH_MIN_DIST,
+  dhash_min: IMG_DHASH_MIN_DIST,
+  phash_min: IMG_PHASH_DCT_MIN_DIST
 });
 
 if (!BOT_TOKEN || !CHANNEL_ID || !OPENAI_API_KEY || PARSE_CHANNELS.length === 0) {
@@ -313,7 +310,7 @@ function parseTMeMessages(username, html) {
     const textHtml = $el.find('.tgme_widget_message_text').html() || '';
     const textPlain = $el.find('.tgme_widget_message_text').text().replace(/\s+/g, ' ').trim();
 
-    // Извлекаем картинки из background-image и из <img>, и добавляем <img> в content, чтобы дальше твой пайплайн их увидел
+    // Изображения: из background-image и <img>
     const imgs = new Set();
     $el.find('a.tgme_widget_message_photo_wrap').each((__, a) => {
       const style = $(a).attr('style') || '';
@@ -340,7 +337,7 @@ function parseTMeMessages(username, html) {
     });
   });
 
-  // Сортируем: по времени desc, при равенстве — по numeric id desc
+  // Сортируем
   items.sort((a, b) => {
     const ta = a.isoDate ? Date.parse(a.isoDate) : 0;
     const tb = b.isoDate ? Date.parse(b.isoDate) : 0;
@@ -357,12 +354,12 @@ async function fetchLatestFromChannel(username, take = 3) {
   const html = await fetchChannelPageHTML(username);
   if (!html) return [];
   const all = parseTMeMessages(username, html);
-  const top = all.slice(0, Math.max(1, Math.min(50, take))); // 1..50 защитно
+  const top = all.slice(0, Math.max(1, Math.min(50, take)));
   log('tme.latest', { user: username, take, returned: top.length });
   return top;
 }
 
-// Сбор по всем каналам: по 3 из каждого → слияние (всего до 15)
+// Сбор по всем каналам
 async function fetchAllFeeds() {
   log('fetchAllFeeds.begin', { channels: PARSE_CHANNELS.length });
   const merged = [];
@@ -373,10 +370,9 @@ async function fetchAllFeeds() {
     log('fetchAllFeeds.channel_done', { user, added: arr.length, total: merged.length });
     if (i < PARSE_CHANNELS.length - 1) {
       log('fetchAllFeeds.sleep', { ms: FEED_DELAY_MS });
-      await sleep(FEED_DELAY_MS); // вежливый интервал между каналами
+      await sleep(FEED_DELAY_MS);
     }
   }
-  // merged уже отсортирован внутри каналов; отсортируем общий массив по времени desc
   merged.sort((a, b) => {
     const ta = a.isoDate ? Date.parse(a.isoDate) : 0;
     const tb = b.isoDate ? Date.parse(b.isoDate) : 0;
@@ -435,296 +431,263 @@ function splitTitleFromBody(markdown = '') {
   return { title, body };
 }
 
-// ----------------- Изображения: служебные -----------------
-// PNG без ресайза (сохраняем W×H), конвертируем в PNG для edits/variations
-async function toPngKeepSize(buffer) {
-  log('img.toPngKeepSize.begin', { in_size: buffer.length });
-  const img = await Jimp.read(buffer);
-  const w = img.getWidth();
-  const h = img.getHeight();
-  log('img.info', { w, h });
-  const out = await img.getBufferAsync(Jimp.MIME_PNG);
-  log('img.toPngKeepSize.done', { out_size: out.length });
-  return { png: out, w, h };
-}
-
-// Растянуть квадрат OpenAI (1024×1024) в точные W×H БЕЗ сохранения пропорций
-async function stretchToOriginalSize(editedBuf, targetW, targetH) {
-  log('img.stretchToOriginal.begin', { in_size: editedBuf.length, targetW, targetH });
-  const edited = await Jimp.read(editedBuf);
-  const out = await edited
-    .resize(targetW, targetH, Jimp.RESIZE_BILINEAR) // деформация до W×H
-    .getBufferAsync(Jimp.MIME_PNG);
-  log('img.stretchToOriginal.done', { out_size: out.length });
-  return out;
-}
-
-// OpenAI edits — смена фона/грейд; 1024×1024
-async function openaiEditBackground(pngBuffer) {
-  log('openai.img.req.begin', { in_size: pngBuffer.length, size: '1024x1024', IMG_STYLE, IMG_FILTER_STRENGTH });
-
-  const stylePromptMap = {
-    cinematic: 'apply a clearly visible cinematic teal-orange color grading, subtle film grain, cooler white balance',
-    vivid:     'apply a clearly visible vivid color grading with higher saturation and crisp contrast',
-    matte:     'apply a clearly visible matte color grading with softened highlights and muted saturation',
-    noir:      'apply a clearly visible high-contrast noir grading with deep blacks and soft highlights',
-    bw:        'convert to clearly visible black-and-white with rich mid-tones and film grain'
-  };
-  const styleLine = stylePromptMap[IMG_STYLE] || stylePromptMap.cinematic;
-  const strengthLine = (IMG_FILTER_STRENGTH === 'high')
-    ? 'strength: high; strong but still realistic'
-    : (IMG_FILTER_STRENGTH === 'low')
-      ? 'strength: low; yet clearly noticeable'
-      : 'strength: medium; clearly noticeable';
-
-  const form = new FormData();
-  form.append('image', pngBuffer, { filename: 'image.png', contentType: 'image/png' });
-  form.append('prompt', [
-    'Change the background to a neutral soft bokeh; remove any text/watermarks.',
-    'Keep the main subject intact, composition and realism preserved.',
-    styleLine + '; ' + strengthLine + '; no borders; no frames; no text.'
-  ].join(' '));
-  form.append('size', '1024x1024');
-  form.append('n', '1');
-  form.append('response_format', 'b64_json');
-
-  try {
-    const res = await fetch(`${OPENAI_BASE_URL}/v1/images/edits`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, ...form.getHeaders() },
-      body: form,
-      timeout: 90000
-    });
-    const txt = await res.text();
-    log('openai.img.status', { status: res.status, len: txt.length });
-    const json = JSON.parse(txt);
-    if (!res.ok) throw new Error(txt);
-    const b64 = json.data?.[0]?.b64_json;
-    if (!b64) throw new Error('No b64_json');
-    const buf = Buffer.from(b64, 'base64');
-    log('openai.img.ok', { out_size: buf.length });
-    return buf;
-  } catch (e) {
-    log('openai.img.error', { error: e.message });
-    return null;
-  }
-}
-
-// OpenAI variations — перерисовка; 1024×1024
-async function openaiVariation(pngBuffer) {
-  const form = new FormData();
-  form.append('image', pngBuffer, { filename: 'image.png', contentType: 'image/png' });
-  form.append('size', '1024x1024');
-  form.append('n', '1');
-  form.append('response_format', 'b64_json');
-  try {
-    const res = await fetch(`${OPENAI_BASE_URL}/v1/images/variations`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, ...form.getHeaders() },
-      body: form,
-      timeout: 90000
-    });
-    const txt = await res.text();
-    log('openai.variation.status', { status: res.status, len: txt.length });
-    const json = JSON.parse(txt);
-    if (!res.ok) throw new Error(txt);
-    const b64 = json.data?.[0]?.b64_json;
-    return b64 ? Buffer.from(b64, 'base64') : null;
-  } catch (e) {
-    log('openai.variation.error', { error: e.message });
-    return null;
-  }
-}
-
-// ---- dHash 64-бит (инвариантен к цвету/яркости, реагирует на композицию) ----
-async function dhash64(buf) {
-  const W = 9, H = 8; // (W-1)*H = 64 бита
-  const img = await Jimp.read(buf);
-  img.resize(W, H).greyscale();
-  let bits = '';
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W - 1; x++) {
-      const a = Jimp.intToRGBA(img.getPixelColor(x, y)).r;
-      const b = Jimp.intToRGBA(img.getPixelColor(x + 1, y)).r;
-      bits += (a > b) ? '1' : '0';
-    }
-  }
-  return bits;
-}
+// ----------------- Хэши (aHash, dHash, pHash) на sharp -----------------
 function hamming(a, b) {
   let d = 0;
-  for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) d++;
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) if (a[i] !== b[i]) d++;
   return d;
 }
 
-// ---- pHash (DCT) 64-бит (63 реально используемых) ----
-async function phash64(buf) {
-  const img = await Jimp.read(buf);
-  img.resize(32, 32).greyscale();
-  const N = 32;
-  const f = Array.from({ length: N }, () => Array(N).fill(0));
-  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-    f[y][x] = Jimp.intToRGBA(img.getPixelColor(x, y)).r / 255;
+async function getGrayRaw(buf, w, h) {
+  const { data, info } = await sharp(buf)
+    .rotate() // применяем EXIF-ориентацию
+    .toColourspace('b-w')
+    .resize(w, h, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  // data — Uint8Array длиной w*h (1 канал)
+  if (info.channels !== 1) {
+    // на всякий случай приведём к 1 каналу
+    const g = [];
+    for (let i = 0; i < data.length; i += info.channels) g.push(data[i]);
+    return Uint8Array.from(g);
   }
+  return data;
+}
+
+// aHash: 8x8, порог по среднему
+async function aHash64(buf) {
+  const W = 8, H = 8;
+  const g = await getGrayRaw(buf, W, H);
+  let sum = 0;
+  for (let i = 0; i < g.length; i++) sum += g[i];
+  const avg = sum / g.length;
+  let bits = '';
+  for (let i = 0; i < g.length; i++) bits += (g[i] >= avg ? '1' : '0');
+  return bits; // 64 бита
+}
+
+// dHash: 9x8, сравнение по горизонтали
+async function dHash64(buf) {
+  const W = 9, H = 8;
+  const g = await getGrayRaw(buf, W, H);
+  let bits = '';
+  for (let y = 0; y < H; y++) {
+    const rowOff = y * W;
+    for (let x = 0; x < W - 1; x++) {
+      bits += (g[rowOff + x] > g[rowOff + x + 1]) ? '1' : '0';
+    }
+  }
+  return bits; // 64 бита
+}
+
+// pHash: 32x32 -> DCT -> верхний 8x8 (кроме DC), порог по медиане
+async function pHash64(buf) {
+  const N = 32;
+  const g = await getGrayRaw(buf, N, N);
+  // нормируем 0..1
+  const f = new Array(N * N);
+  for (let i = 0; i < N * N; i++) f[i] = g[i] / 255;
+
   const C = (k) => (k === 0 ? Math.SQRT1_2 : 1);
-  const F = Array.from({ length: N }, () => Array(N).fill(0));
-  for (let u = 0; u < N; u++) {
-    for (let v = 0; v < N; v++) {
+  const F = new Array(N * N).fill(0);
+  for (let u = 0; u < 8; u++) {
+    for (let v = 0; v < 8; v++) {
       let sum = 0;
       for (let y = 0; y < N; y++) {
         for (let x = 0; x < N; x++) {
-          sum += f[y][x] *
+          sum += f[y * N + x] *
             Math.cos(((2 * x + 1) * u * Math.PI) / (2 * N)) *
             Math.cos(((2 * y + 1) * v * Math.PI) / (2 * N));
         }
       }
-      F[u][v] = (C(u) * C(v) / 4) * sum;
+      F[u * N + v] = (C(u) * C(v) / 4) * sum;
     }
   }
   const coeffs = [];
   for (let u = 0; u < 8; u++) for (let v = 0; v < 8; v++) {
     if (u === 0 && v === 0) continue;
-    coeffs.push(F[u][v]);
+    coeffs.push(F[u * N + v]);
   }
-  const median = coeffs.slice().sort((a,b)=>a-b)[Math.floor(coeffs.length/2)];
+  const sorted = coeffs.slice().sort((a,b)=>a-b);
+  const median = sorted[Math.floor(sorted.length/2)];
   let bits = '';
-  for (const c of coeffs) bits += (c > median) ? '1' : '0';
-  return bits; // длина 63
+  for (const c of coeffs) bits += (c > median ? '1' : '0');
+  return bits; // 63 бита
 }
 
 async function hashDistances(origBuf, candBuf) {
-  const [dhA, dhB] = await Promise.all([dhash64(origBuf), dhash64(candBuf)]);
-  const [phA, phB] = await Promise.all([phash64(origBuf), phash64(candBuf)]);
-  return { d: hamming(dhA, dhB), p: hamming(phA, phB) };
+  const [aA, dA, pA] = await Promise.all([aHash64(origBuf), dHash64(origBuf), pHash64(origBuf)]);
+  const [aB, dB, pB] = await Promise.all([aHash64(candBuf), dHash64(candBuf), pHash64(candBuf)]);
+  return {
+    a: hamming(aA, aB),
+    d: hamming(dA, dB),
+    p: hamming(pA, pB)
+  };
 }
 
-// ---- Структурная аугментация ----
-async function structuralAugment(buf, targetW, targetH) {
-  const img = await Jimp.read(buf);
+// ----------------- Изображения на sharp -----------------
+async function toPngKeepSize(buffer) {
+  try {
+    const meta = await sharp(buffer).rotate().metadata(); // rotate() применяет EXIF
+    const out = await sharp(buffer).rotate().png({ compressionLevel: 9, quality: 100 }).toBuffer();
+    log('img.toPngKeepSize.done', { w: meta.width, h: meta.height, out_size: out.length });
+    return { png: out, w: meta.width, h: meta.height };
+  } catch (e) {
+    log('img.toPngKeepSize.error', { error: e.message });
+    throw e;
+  }
+}
 
-  if (Math.random() < IMG_FLIP_PROB) img.flip(true, false);
+// Лёгкая цветокоррекция без деградации
+async function applyLocalFilterSharp(buf, { style = IMG_STYLE, strength = IMG_FILTER_STRENGTH } = {}) {
+  if (style === 'none') return buf;
 
-  const ang = (Math.random() * 2 - 1) * IMG_ROTATE_MAX_DEG;
-  img.rotate(ang, false); // без увеличения канвы
+  const s = (strength === 'high')
+    ? { sat: 1.18, bright: 1.03, gamma: 0.95 }
+    : (strength === 'low')
+      ? { sat: 1.06, bright: 1.01, gamma: 1.00 }
+      : { sat: 1.10, bright: 1.02, gamma: 0.98 };
 
-  const cropK = IMG_CROP_MIN + Math.random() * (IMG_CROP_MAX - IMG_CROP_MIN);
-  const cw = Math.max(8, Math.floor(img.getWidth() * cropK));
-  const ch = Math.max(8, Math.floor(img.getHeight() * cropK));
-  const maxX = Math.max(0, img.getWidth() - cw);
-  const maxY = Math.max(0, img.getHeight() - ch);
-  const x = Math.floor(Math.random() * (maxX + 1));
-  const y = Math.floor(Math.random() * (maxY + 1));
-  const cropped = img.clone().crop(x, y, cw, ch);
+  let img = sharp(buf);
 
-  const bg = img.clone().blur(8).resize(targetW, targetH);
-  const out = new Jimp(targetW, targetH);
-  out.composite(bg, 0, 0);
+  if (style === 'bw' || style === 'noir') {
+    img = img.greyscale();
+  }
 
-  const k = Math.min(targetW / cw, targetH / ch);
-  const nw = Math.max(1, Math.floor(cw * k));
-  const nh = Math.max(1, Math.floor(ch * k));
-  const ox = Math.floor((targetW - nw) * (0.38 + Math.random() * 0.5));
-  const oy = Math.floor((targetH - nh) * (0.38 + Math.random() * 0.5));
-  cropped.resize(nw, nh, Jimp.RESIZE_BILINEAR);
-  out.composite(cropped, ox, oy);
+  img = img.modulate({
+    brightness: s.bright,
+    saturation: style === 'noir' ? 1.00 : s.sat,
+    hue: style === 'vivid' ? 8 : 0
+  }).gamma(s.gamma);
 
-  const vign = new Jimp(targetW, targetH, 0x00000000);
-  const edge = Math.max(targetW, targetH);
-  for (let yy = 0; yy < targetH; yy++) {
-    for (let xx = 0; xx < targetW; xx++) {
-      const dx = (xx - targetW / 2), dy = (yy - targetH / 2);
-      const r = Math.sqrt(dx * dx + dy * dy) / (edge / 2);
-      const a = Math.max(0, Math.min(80, Math.floor((r - 0.6) * 220)));
-      vign.setPixelColor(Jimp.rgbaToInt(0, 0, 0, a), xx, yy);
+  if (style === 'cinematic' || style === 'matte' || style === 'vivid' || style === 'noir') {
+    const meta = await sharp(buf).metadata();
+    const { width: W, height: H } = meta;
+    const teal = { r: 14, g: 58, b: 89, alpha: style === 'cinematic' ? 0.18 : 0.08 };
+    const orange = { r: 255, g: 138, b: 0, alpha: style === 'cinematic' ? 0.14 : 0.06 };
+
+    const overlayTeal = await sharp({
+      create: { width: W, height: H, channels: 4, background: teal }
+    }).png().toBuffer();
+
+    const overlayOrange = await sharp({
+      create: { width: W, height: H, channels: 4, background: orange }
+    }).png().toBuffer();
+
+    img = img
+      .composite([{ input: overlayTeal, blend: 'overlay' }])
+      .composite([{ input: overlayOrange, blend: 'soft-light' }]);
+
+    if (style === 'matte') {
+      img = img.linear(1, -5).sharpen(0.2);
     }
   }
-  out.composite(vign, 0, 0);
-  return await out.getBufferAsync(Jimp.MIME_PNG);
-}
 
-// Гарантировать отличие по dHash + pHash; при необходимости — variations
-async function ensureDistinctEnough(origPng, candidateBuf, W, H) {
-  let out = candidateBuf;
-  for (let i = 0; i < IMG_STRUCT_TRIES; i++) {
-    out = await structuralAugment(out, W, H);
-    const dist = await hashDistances(origPng, out);
-    log('img.struct.check', { try: i + 1, dHash: dist.d, pHash: dist.p, needD: IMG_DHASH_MIN_DIST, needP: IMG_PHASH_DCT_MIN_DIST });
-    if (dist.d >= IMG_DHASH_MIN_DIST && dist.p >= IMG_PHASH_DCT_MIN_DIST) return out;
-  }
-  if (!IMG_ALLOW_VARIATIONS) return out;
-
-  for (let j = 0; j < IMG_VARIATION_TRIES; j++) {
-    const v = await openaiVariation(out);
-    if (!v) continue;
-    const stretched = await stretchToOriginalSize(v, W, H).catch(()=>v);
-    const finalTry = await structuralAugment(stretched, W, H);
-    const dist = await hashDistances(origPng, finalTry);
-    log('img.variation.check', { attempt: j + 1, dHash: dist.d, pHash: dist.p });
-    if (dist.d >= IMG_DHASH_MIN_DIST && dist.p >= IMG_PHASH_DCT_MIN_DIST) return finalTry;
-    out = finalTry;
-  }
-  return out;
-}
-
-// Оценка «насколько отличаются» картинки (0..1)
-async function diffRatio(aBuf, bBuf) {
-  const SIZE = 64;
-  const a = await Jimp.read(aBuf);
-  const b = await Jimp.read(bBuf);
-  a.resize(SIZE, SIZE, Jimp.RESIZE_BILINEAR);
-  b.resize(SIZE, SIZE, Jimp.RESIZE_BILINEAR);
-  let diff = 0;
-  for (let y = 0; y < SIZE; y++) {
-    for (let x = 0; x < SIZE; x++) {
-      const ca = Jimp.intToRGBA(a.getPixelColor(x, y));
-      const cb = Jimp.intToRGBA(b.getPixelColor(x, y));
-      diff += Math.abs(ca.r - cb.r) + Math.abs(ca.g - cb.g) + Math.abs(ca.b - cb.b);
-    }
-  }
-  const max = SIZE * SIZE * 255 * 3;
-  const ratio = diff / max;
-  log('img.diff.ratio', { ratio: Number(ratio.toFixed(5)) });
-  return ratio;
-}
-
-// Локальный фильтр (Jimp)
-async function applyLocalFilter(buf, { style = IMG_STYLE, strength = IMG_FILTER_STRENGTH } = {}) {
-  const img = await Jimp.read(buf);
-  const w = img.getWidth(), h = img.getHeight();
-  const s = (strength === 'high') ? { c: 0.18, br: 0.035, sat: 18, o1: 0.18, o2: 0.14, noise: 4 }
-          : (strength === 'low')  ? { c: 0.06, br: 0.010, sat:  6, o1: 0.08, o2: 0.06, noise: 1 }
-                                  : { c: 0.12, br: 0.020, sat: 10, o1: 0.14, o2: 0.10, noise: 2 };
-
-  img.contrast(s.c).brightness(s.br);
-  if (style !== 'bw' && style !== 'noir') {
-    img.color([{ apply: 'saturate', params: [s.sat] }]);
-  }
-  if (style === 'cinematic') {
-    const teal = new Jimp(w, h, '#0e3a59');
-    const orange = new Jimp(w, h, '#ff8a00');
-    img.composite(teal, 0, 0, { mode: Jimp.BLEND_OVERLAY, opacitySource: s.o1, opacityDest: 1 });
-    img.composite(orange, 0, 0, { mode: Jimp.BLEND_SOFTLIGHT, opacitySource: s.o2, opacityDest: 1 });
-  } else if (style === 'vivid') {
-    img.color([{ apply: 'saturate', params: [s.sat] }, { apply: 'spin', params: [8] }]);
-  } else if (style === 'matte') {
-    img.color([{ apply: 'desaturate', params: [6] }]).contrast(-0.03);
-    const matte = new Jimp(w, h, '#2b2b2b');
-    img.composite(matte, 0, 0, { mode: Jimp.BLEND_SOFTLIGHT, opacitySource: 0.10, opacityDest: 1 });
-  } else if (style === 'noir') {
-    img.greyscale().contrast(0.18);
-  } else if (style === 'bw') {
-    img.greyscale().contrast(0.12);
-  }
-
-  if (typeof img.noise === 'function') {
-    img.noise(s.noise);
-  } else {
-    log('img.localFilter.warn', { reason: 'noise_not_supported_in_this_jimp' });
-  }
-
-  const out = await img.getBufferAsync(Jimp.MIME_PNG);
+  const out = await img.png({ compressionLevel: 9, quality: 100 }).toBuffer();
   log('img.localFilter.out', { size: out.length, style, strength });
   return out;
+}
+
+async function makeRadialVignette(W, H, alpha = 0.18) {
+  const buf = Buffer.alloc(W * H * 4);
+  const cx = W / 2, cy = H / 2;
+  const maxR = Math.sqrt(cx * cx + cy * cy);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const dx = x - cx, dy = y - cy;
+      const r = Math.sqrt(dx * dx + dy * dy) / maxR; // 0..1
+      const v = Math.max(0, Math.min(1, (r - 0.6) / 0.4)); // 0..1 к краям
+      const k = Math.floor(255 * v * alpha);
+      const idx = (y * W + x) * 4;
+      buf[idx + 0] = 0;
+      buf[idx + 1] = 0;
+      buf[idx + 2] = 0;
+      buf[idx + 3] = k;
+    }
+  }
+  return await sharp(buf, { raw: { width: W, height: H, channels: 4 } }).png().toBuffer();
+}
+
+// Структурная модификация без деградации: кроп (0.92–0.98), LANCZOS3, смещение на блюр-фон, опциональный горизонтальный flop
+async function structuralAugmentSharp(origBuf, W, H) {
+  const base = sharp(origBuf).rotate(); // учитываем EXIF
+  const meta = await base.metadata();
+  const srcW = meta.width, srcH = meta.height;
+
+  const mirror = Math.random() < IMG_FLIP_PROB; // только горизонтально (не flip)
+  const basePrepared = mirror ? base.clone().flop() : base.clone();
+
+  // Фон: блюр в целевом размере
+  const bg = await base.clone()
+    .resize(W, H, { fit: 'cover', kernel: sharp.kernel.lanczos3 })
+    .blur(8)
+    .png()
+    .toBuffer();
+
+  // Случайный кроп без изменения пропорций
+  const cropK = IMG_CROP_MIN + Math.random() * (IMG_CROP_MAX - IMG_CROP_MIN);
+  const cw = Math.max(8, Math.floor(srcW * cropK));
+  const ch = Math.max(8, Math.floor(srcH * cropK));
+  const maxX = Math.max(0, srcW - cw);
+  const maxY = Math.max(0, srcH - ch);
+  const left = Math.floor(Math.random() * (maxX + 1));
+  const top = Math.floor(Math.random() * (maxY + 1));
+
+  // Маленький наклон, но не «вверх ногами»
+  const angle = IMG_ROTATE_MAX_DEG > 0 ? (Math.random() * 2 - 1) * IMG_ROTATE_MAX_DEG : 0;
+
+  const cropBuf = await basePrepared
+    .clone()
+    .extract({ left, top, width: cw, height: ch })
+    .rotate(angle, { background: { r: 0, g: 0, b: 0, alpha: 0 }})
+    .resize(W, H, { fit: 'inside', kernel: sharp.kernel.lanczos3 })
+    .png()
+    .toBuffer();
+
+  const cropMeta = await sharp(cropBuf).metadata();
+  const newW = cropMeta.width;
+  const newH = cropMeta.height;
+
+  // Случайный оффсет на канвасе
+  const ox = Math.floor((W - newW) * Math.random());
+  const oy = Math.floor((H - newH) * Math.random());
+
+  // Сборка
+  const composed = await sharp(bg)
+    .composite([{ input: cropBuf, left: ox, top: oy }])
+    .png({ compressionLevel: 9, quality: 100 })
+    .toBuffer();
+
+  // Лёгкая виньетка
+  const vignetteAlpha = 0.18;
+  const vignette = await makeRadialVignette(W, H, vignetteAlpha);
+  const withVignette = await sharp(composed)
+    .composite([{ input: vignette, blend: 'multiply' }])
+    .png({ compressionLevel: 9, quality: 100 })
+    .toBuffer();
+
+  return withVignette;
+}
+
+// Обеспечить «непохожесть» по всем 3 хэшам, сохраняя W×H и высокое качество
+async function ensureDistinctEnoughSharp(origPng, W, H) {
+  if (!IMG_REQUIRE_ORIGINALITY) return origPng;
+
+  let candidate = origPng;
+  for (let i = 0; i < IMG_STRUCT_TRIES; i++) {
+    candidate = await structuralAugmentSharp(origPng, W, H);
+    candidate = await applyLocalFilterSharp(candidate, { style: IMG_STYLE, strength: IMG_FILTER_STRENGTH });
+
+    const dist = await hashDistances(origPng, candidate);
+    log('img.struct.check', { try: i + 1, aHash: dist.a, dHash: dist.d, pHash: dist.p });
+
+    if (dist.a >= IMG_AHASH_MIN_DIST && dist.d >= IMG_DHASH_MIN_DIST && dist.p >= IMG_PHASH_DCT_MIN_DIST) {
+      return candidate;
+    }
+  }
+  return candidate;
 }
 
 async function downloadBuffer(url) {
@@ -915,7 +878,7 @@ async function offerNext(ctx) {
   log('offer.next.begin', { chat: ctx.chat?.id });
   try {
     await ctx.reply('Ищу самую свежую запись…');
-    const items = await fetchAllFeeds(); // теперь: 3 из каждого канала, потом объединение
+    const items = await fetchAllFeeds();
     const normalized = items.map(it => ({ ...it, ts: toTs(it.isoDate) }));
     normalized.sort((a, b) => b.ts - a.ts);
     log('offer.sorted', { count: normalized.length, top_ts: normalized[0]?.ts });
@@ -960,7 +923,7 @@ async function offerNext(ctx) {
   }
 }
 
-// Публикация: переписываем текст, правим фон/тон, гарантируем структурные отличия и отправляем
+// Публикация: переписываем текст + делаем картинку «оригинальной» (aHash/dHash/pHash) без падения качества
 async function publishToChannel(ctx, item, keys) {
   log('publish.begin', { id: keys.id, source: item.source, link: item.link });
   try {
@@ -980,54 +943,25 @@ async function publishToChannel(ctx, item, keys) {
       const buf = await downloadBuffer(url);
       if (!buf) { log('publish.image.skip.download', { url }); continue; }
 
-      const converted = await toPngKeepSize(buf).catch(e => { log('img.toPngKeepSize.error', { error: e.message }); return null; });
-      let finalBuf = null;
+      try {
+        const { png, w, h } = await toPngKeepSize(buf);
+        const distinct = await ensureDistinctEnoughSharp(png, w, h);
 
-      if (converted && converted.png) {
-        const { png, w, h } = converted;
+        // опционально ещё лёгкая фильтрация (если стиль задан)
+        const finalBuf = await applyLocalFilterSharp(distinct, { style: IMG_STYLE, strength: IMG_FILTER_STRENGTH });
 
-        // OpenAI edits: 1024×1024
-        const edited = await openaiEditBackground(png);
-
-        // Базовый кандидат
-        let candidate = edited || png;
-
-        // Растягиваем квадрат до точных исходных W×H
-        let stretched = await stretchToOriginalSize(candidate, w, h).catch(e => {
-          log('img.stretchToOriginal.error', { error: e.message });
-          return candidate;
+        mediaGroup.push({
+          type: 'photo',
+          media: { source: finalBuf, filename: `photo_${i + 1}.png` }
         });
-
-        // Проверяем «заметность»; при слабом отличии — локальный фильтр
-        try {
-          const ratio = await diffRatio(png, stretched);
-          const needLocal = IMG_ALWAYS_LOCAL_FILTER || (ratio < IMG_DIFF_THRESHOLD);
-          log('img.diff.decision', { ratio: Number(ratio.toFixed(5)), threshold: IMG_DIFF_THRESHOLD, apply_local: needLocal });
-          if (needLocal) {
-            stretched = await applyLocalFilter(stretched, { style: IMG_STYLE, strength: IMG_FILTER_STRENGTH });
-            log('img.localFilter.applied', { idx: i + 1 });
-          }
-        } catch (e) {
-          log('img.diff.error', { error: e.message });
-        }
-
-        // Гарантируем отличие по dHash + pHash, при необходимости — variations
-        let structural = stretched;
-        try {
-          if (IMG_ENSURE_STRUCT) structural = await ensureDistinctEnough(png, stretched, w, h);
-        } catch (e) { log('img.struct.error', { error: e.message }); }
-
-        finalBuf = structural;
-        log('publish.image.use.stretched', { idx: i + 1, size: finalBuf.length, target_w: w, target_h: h });
-      } else {
-        finalBuf = buf;
-        log('publish.image.use.original_noresize', { idx: i + 1, size: buf.length });
+      } catch (e) {
+        log('publish.image.error', { error: e.message, url: trunc(url, 180) });
+        // Фоллбек — отдать как есть
+        mediaGroup.push({
+          type: 'photo',
+          media: { source: buf, filename: `photo_${i + 1}.png` }
+        });
       }
-
-      mediaGroup.push({
-        type: 'photo',
-        media: { source: finalBuf, filename: `photo_${i + 1}.png` }
-      });
     }
     log('publish.mediaGroup.ready', { photos: mediaGroup.length });
 
