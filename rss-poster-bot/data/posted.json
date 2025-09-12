@@ -71,6 +71,102 @@
       "isoDate": "2025-09-11T15:04:01.000Z",
       "status": "offered",
       "offeredAt": "2025-09-11T20:06:37.345Z"
+    },
+    "id:https://t.me/anrbc/12954": {
+      "id": "https://t.me/anrbc/12954",
+      "link": "https://t.me/anrbc/12954",
+      "source": "anrbc",
+      "isoDate": "2025-09-12T10:30:02.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-12T10:35:14.040Z"
+    },
+    "uh:27696abbc2436d98b1ab4dd5f3cd86924a557c22f5134d902ad1b59e3f4e0d09": {
+      "id": "https://t.me/anrbc/12954",
+      "link": "https://t.me/anrbc/12954",
+      "source": "anrbc",
+      "isoDate": "2025-09-12T10:30:02.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-12T10:35:14.040Z"
+    },
+    "ch:07c3b113360f2d1ca772cd1d93984a97b6e7925df4bd0505f74ea80df0a3eaca": {
+      "id": "https://t.me/anrbc/12954",
+      "link": "https://t.me/anrbc/12954",
+      "source": "anrbc",
+      "isoDate": "2025-09-12T10:30:02.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-12T10:35:14.040Z"
+    },
+    "id:https://t.me/nexpertGM/11709": {
+      "id": "https://t.me/nexpertGM/11709",
+      "link": "https://t.me/nexpertGM/11709",
+      "source": "nexpertGM",
+      "isoDate": "2025-09-12T10:27:26.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-12T10:35:37.292Z"
+    },
+    "uh:4149d6e1dd95844ebdbf0fe8458dd321a563c3db518223ef28ade5a65b16e213": {
+      "id": "https://t.me/nexpertGM/11709",
+      "link": "https://t.me/nexpertGM/11709",
+      "source": "nexpertGM",
+      "isoDate": "2025-09-12T10:27:26.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-12T10:35:37.292Z"
+    },
+    "ch:282f9c6cc77ad9c9f6d09f4df0064ae42c45e76cbcb2075d1831b7a0bdec01d8": {
+      "id": "https://t.me/nexpertGM/11709",
+      "link": "https://t.me/nexpertGM/11709",
+      "source": "nexpertGM",
+      "isoDate": "2025-09-12T10:27:26.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-12T10:35:37.292Z"
+    },
+    "id:https://t.me/drom/31911": {
+      "id": "https://t.me/drom/31911",
+      "link": "https://t.me/drom/31911",
+      "source": "drom",
+      "isoDate": "2025-09-12T09:56:42.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-12T10:37:32.810Z"
+    },
+    "uh:49b07cc0c1a0478ccc8bef55df6eaacd839d65891aa1695fce5e40bfebec84a7": {
+      "id": "https://t.me/drom/31911",
+      "link": "https://t.me/drom/31911",
+      "source": "drom",
+      "isoDate": "2025-09-12T09:56:42.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-12T10:37:32.810Z"
+    },
+    "ch:cdcee864b6d6dcb542f4e7aeef2e2e686dbc81aa75c7368124b20b338f4f3dfc": {
+      "id": "https://t.me/drom/31911",
+      "link": "https://t.me/drom/31911",
+      "source": "drom",
+      "isoDate": "2025-09-12T09:56:42.000Z",
+      "status": "posted",
+      "postedAt": "2025-09-12T10:37:32.810Z"
+    },
+    "id:https://t.me/AutoDrajv/1698": {
+      "id": "https://t.me/AutoDrajv/1698",
+      "link": "https://t.me/AutoDrajv/1698",
+      "source": "AutoDrajv",
+      "isoDate": "2025-09-12T09:50:40.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-12T10:37:46.816Z"
+    },
+    "uh:aabdfaabc8ba8c4629987cb5c7ea4d10f5d40282716947440185ba54cced107f": {
+      "id": "https://t.me/AutoDrajv/1698",
+      "link": "https://t.me/AutoDrajv/1698",
+      "source": "AutoDrajv",
+      "isoDate": "2025-09-12T09:50:40.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-12T10:37:46.816Z"
+    },
+    "ch:7bf18e479fa27e58f58e4570969ddc1f4a23946d48c72f0f6d64cf3d2573495c": {
+      "id": "https://t.me/AutoDrajv/1698",
+      "link": "https://t.me/AutoDrajv/1698",
+      "source": "AutoDrajv",
+      "isoDate": "2025-09-12T09:50:40.000Z",
+      "status": "offered",
+      "offeredAt": "2025-09-12T10:37:46.816Z"
     }
   }
 }

@@ -34,18 +34,13 @@ const TEXT_PROMPT = `
 - Единый стиль чисел/единиц.
 - Без тавтологии и канцелярита.
 ДЛИНА:
-- ~120–180 слов, не больше 800 символов.
+-  не больше 800 символов.(включая пробелы и переносы строк)
 ПРОВЕРКИ:
 - Совпадение фактов/чисел.
 - Антиплагиат: иной порядок/формулировки.
 - Корректность ссылок.
 - Ясность и читабельность.
 `;
-// index.js — Node 16
-// deps: telegraf@4, node-fetch@2, cheerio@1, sharp@0.32, dotenv
-//
-// npm i telegraf@4 node-fetch@2 cheerio@1 sharp@0.32 dotenv
-
 require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const fetch = require('node-fetch'); // v2 для Node 16
@@ -54,6 +49,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const cheerio = require('cheerio');
+
 
 // ----------------- Утилиты -----------------
 const DATA_DIR = path.join(__dirname, 'data');
@@ -88,13 +84,19 @@ const CHANNELS = (process.env.CHANNELS || '')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
-const DEFAULT_CHANNELS = [
+
+// >>> единственное изменение: DEFAULT_CHANNELS берётся из .env <<<
+const DEFAULT_CHANNELS = (process.env.DEFAULT_CHANNELS || [
   't.me/avtonovosti_rus',
   't.me/AutoDrajv',
   't.me/drom',
   't.me/anrbc',
   't.me/nexpertGM',
-];
+].join(','))
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
 const PARSE_CHANNELS = (CHANNELS.length ? CHANNELS : DEFAULT_CHANNELS)
   .map(s => s.replace(/^https?:\/\/t\.me\/(s\/)?/i, ''))
   .map(s => s.replace(/^t\.me\//i, ''))
