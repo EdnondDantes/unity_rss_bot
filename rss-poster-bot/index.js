@@ -80,6 +80,10 @@ const CHANNEL_ID = process.env.CHANNEL_ID; // @username или -100...
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com').replace(/\/+$/,'');
 
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+const DEEPSEEK_BASE_URL = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/,'');
+const DEEPSEEK_MODEL = (process.env.DEEPSEEK_MODEL || 'deepseek-chat').trim();
+
 // Новое: список каналов (юзернеймы или ссылки t.me/...); если нет — подставим твои 5 каналов
 const CHANNELS = (process.env.CHANNELS || '')
   .split(',')
@@ -143,6 +147,9 @@ log('config.values', {
   bot_token: mask(BOT_TOKEN),
   openai_key: mask(OPENAI_API_KEY),
   openai_base_url: OPENAI_BASE_URL,
+  deepseek_key: mask(DEEPSEEK_API_KEY),
+  deepseek_base_url: DEEPSEEK_BASE_URL,
+  deepseek_model: DEEPSEEK_MODEL,
   log_to_file: LOG_TO_FILE,
   max_photos: MAX_PHOTOS,
   feed_delay_ms: FEED_DELAY_MS,
@@ -162,9 +169,9 @@ log('config.values', {
   caption_safe: CAPTION_SAFE
 });
 
-if (!BOT_TOKEN || !CHANNEL_ID || !OPENAI_API_KEY || PARSE_CHANNELS.length === 0) {
+if (!BOT_TOKEN || !CHANNEL_ID || !DEEPSEEK_API_KEY || PARSE_CHANNELS.length === 0) {
   log('config.error.missing_env');
-  console.error('Нужны BOT_TOKEN, CHANNEL_ID, OPENAI_API_KEY и CHANNELS (или используйте дефолтный список).');
+  console.error('Нужны BOT_TOKEN, CHANNEL_ID, DEEPSEEK_API_KEY и CHANNELS (или используйте дефолтный список).');
   process.exit(1);
 }
 
@@ -500,6 +507,44 @@ async function openaiChatRewrite({ title, plain, link }) {
     const h2 = makeTitleFromPlain(safePlain);
     const md = `## ${h2}\n\n${safePlain}`;
     log('openai.chat.fallback', { out_len: md.length });
+    return md;
+  }
+}
+
+async function deepseekChatRewrite({ title, plain, link }) {
+  const body = {
+    model: DEEPSEEK_MODEL, // например: 'deepseek-chat'
+    messages: [
+      { role: 'system', content: TEXT_PROMPT },
+      { role: 'user', content: `ЗАГОЛОВОК: ${title}\nТЕКСТ: ${plain}\nССЫЛКА: ${link}` }
+    ],
+    temperature: 0.7
+  };
+  log('deepseek.chat.req', { title: trunc(title, 120), plain_len: plain.length, link, model: DEEPSEEK_MODEL });
+  try {
+    const res = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body),
+      timeout: 30000
+    });
+    const txt = await res.text();
+    log('deepseek.chat.status', { status: res.status, len: txt.length });
+    const json = JSON.parse(txt);
+    if (!res.ok) throw new Error(txt);
+    const text = json.choices?.[0]?.message?.content?.trim() || '';
+    log('deepseek.chat.ok', { out_len: text.length, sample: trunc(text, 200) });
+    return text;
+  } catch (e) {
+    log('deepseek.chat.error', { error: e.message });
+    // Фолбэк: новый H2 + тело из plain, без исходного заголовка
+    const safePlain = (plain || '').replace(/\s+/g, ' ').trim();
+    const h2 = makeTitleFromPlain(safePlain);
+    const md = `## ${h2}\n\n${safePlain}`;
+    log('deepseek.chat.fallback', { out_len: md.length });
     return md;
   }
 }
@@ -1005,7 +1050,8 @@ async function publishToChannel(ctx, item, keys) {
   try {
     // 1) Текст -> новый заголовок + тело
     const plain = (item.contentSnippet || stripHtml(item.content || '')).trim();
-    const rewrittenRaw = await openaiChatRewrite({ title: item.title || '', plain, link: item.link || '' });
+    // const rewrittenRaw = await openaiChatRewrite({ title: item.title || '', plain, link: item.link || '' });
+    const rewrittenRaw = await deepseekChatRewrite({ title: item.title || '', plain, link: item.link || '' });
     const { title: newTitle, body: rewrittenBody } = splitTitleFromBody(rewrittenRaw);
     // Никогда не используем исходный item.title как заголовок публикации
     const finalTitle = newTitle || makeTitleFromPlain(plain);
