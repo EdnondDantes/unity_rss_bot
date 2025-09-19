@@ -74,9 +74,8 @@ function log(step, meta = {}) {
   }
 }
 
-// ----------------- Конфиг -----------------
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const CHANNEL_ID = process.env.CHANNEL_ID; // @username или -100...
+const CHANNEL_ID = process.env.CHANNEL_ID; // 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com').replace(/\/+$/,'');
 
@@ -145,7 +144,6 @@ log('config.values', {
   channels: PARSE_CHANNELS,
   channel_id: CHANNEL_ID,
   bot_token: mask(BOT_TOKEN),
-  openai_key: mask(OPENAI_API_KEY),
   openai_base_url: OPENAI_BASE_URL,
   deepseek_key: mask(DEEPSEEK_API_KEY),
   deepseek_base_url: DEEPSEEK_BASE_URL,
