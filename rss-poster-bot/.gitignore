@@ -1,3 +1,4 @@
+
 # ==== Node / пакетные менеджеры ====
 **/node_modules/
 # Если используешь PnP:
@@ -62,3 +63,7 @@ Thumbs.db
 # ==== Docker (если используешь) ====
 docker-data/
 .docker/
+
+mtproto_login.js
+
+
