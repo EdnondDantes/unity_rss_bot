@@ -47,6 +47,7 @@ const TEXT_PROMPT = `
 - Ясность и читабельность.
 `;
 
+
 require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const fetch = require('node-fetch'); // v2 для Node 16
@@ -361,16 +362,23 @@ async function fetchAllFeeds() {
 }
 
 // ----------------- OpenAI/DeepSeek (текст) -----------------
-async function openaiChatRewrite({ title, plain, link }) {
+async function openaiChatRewrite({ title, plain, link, imagesMeta = [] }) {
+  // ---- FIX: добавить блок IMAGES в prompt ----
+  const imagesBlock = Array.isArray(imagesMeta) && imagesMeta.length
+    ? '\nIMAGES:\n' + imagesMeta.map((m, i) =>
+        `  - [${i + 1}] ${m.filename}${(m.width && m.height) ? ` ${m.width}x${m.height}px` : ''}`
+      ).join('\n') + '\n'
+    : '';
+
   const body = {
     model: 'gpt-4o-mini',
     messages: [
       { role: 'system', content: TEXT_PROMPT },
-      { role: 'user', content: `ЗАГОЛОВОК: ${title}\nТЕКСТ: ${plain}\nССЫЛКА: ${link}` }
+      { role: 'user', content: `ЗАГОЛОВОК: ${title}\nТЕКСТ: ${plain}\nССЫЛКА: ${link}${imagesBlock}` }
     ],
     temperature: 0.7
   };
-  log('openai.chat.req', { title: trunc(title, 120), plain_len: plain.length, link });
+  log('openai.chat.req', { title: trunc(title, 120), plain_len: plain.length, link, images: imagesMeta.length });
   try {
     const res = await fetch(`${OPENAI_BASE_URL}/v1/chat/completions`, {
       method: 'POST',
@@ -393,16 +401,23 @@ async function openaiChatRewrite({ title, plain, link }) {
     return md;
   }
 }
-async function deepseekChatRewrite({ title, plain, link }) {
+async function deepseekChatRewrite({ title, plain, link, imagesMeta = [] }) {
+  // ---- FIX: добавить блок IMAGES в prompt ----
+  const imagesBlock = Array.isArray(imagesMeta) && imagesMeta.length
+    ? '\nIMAGES:\n' + imagesMeta.map((m, i) =>
+        `  - [${i + 1}] ${m.filename}${(m.width && m.height) ? ` ${m.width}x${m.height}px` : ''}`
+      ).join('\n') + '\n'
+    : '';
+
   const body = {
     model: DEEPSEEK_MODEL,
     messages: [
       { role: 'system', content: TEXT_PROMPT },
-      { role: 'user', content: `ЗАГОЛОВОК: ${title}\nТЕКСТ: ${plain}\nССЫЛКА: ${link}` }
+      { role: 'user', content: `ЗАГОЛОВОК: ${title}\nТЕКСТ: ${plain}\nССЫЛКА: ${link}${imagesBlock}` }
     ],
     temperature: 0.7
   };
-  log('deepseek.chat.req', { title: trunc(title, 120), plain_len: plain.length, link, model: DEEPSEEK_MODEL });
+  log('deepseek.chat.req', { title: trunc(title, 120), plain_len: plain.length, link, model: DEEPSEEK_MODEL, images: imagesMeta.length });
   try {
     const res = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
       method: 'POST',
@@ -543,7 +558,8 @@ async function fetchMediaByLink(tmeLink, { includeVideo = false } = {}) {
   // Попытка тихо вступить в публичный канал — иногда влияет на доступ к медиа
   try { await client.invoke(new Api.channels.JoinChannel({ channel: entity })); } catch (_) {}
 
-  let [msg] = await client.getMessages(entity, { ids: [parsed.msgId] });
+  let firstArr = await client.getMessages(entity, { ids: [parsed.msgId] }).catch(() => []);
+  let msg = Array.isArray(firstArr) ? firstArr[0] : firstArr;
   if (!msg) return [];
 
   // Альбом
@@ -551,16 +567,17 @@ async function fetchMediaByLink(tmeLink, { includeVideo = false } = {}) {
   if (msg.groupedId) {
     const ids = [];
     for (let i = parsed.msgId - 25; i <= parsed.msgId + 25; i++) if (i > 0) ids.push(i);
-    const around = await client.getMessages(entity, { ids });
-    msgs = around.filter(m => String(m.groupedId) === String(msg.groupedId));
+    const aroundRaw = await client.getMessages(entity, { ids }).catch(() => []);
+    const around = (Array.isArray(aroundRaw) ? aroundRaw : [aroundRaw]).filter(Boolean); // <-- FIX: убрать дырки
+    msgs = around.filter(m => String(m.groupedId || '') === String(msg.groupedId));
     if (!msgs.length) msgs = [msg];
+    msgs.sort((a,b) => a.id - b.id); // порядок как в телеге
   }
 
   const out = [];
   for (const m of msgs) {
     if (m.photo) {
       const buf = await client.downloadMedia(m, { workers: 2 });
-      // размеры фото Telegram напрямую получить сложно; проверим sharp
       let width, height;
       try { const meta = await sharp(buf).metadata(); width = meta.width; height = meta.height; } catch {}
       out.push({ buffer: buf, filename: `photo_${parsed.username}_${m.id}.jpg`, mime: 'image/jpeg', type: 'photo', width, height });
@@ -573,7 +590,7 @@ async function fetchMediaByLink(tmeLink, { includeVideo = false } = {}) {
       try { const meta = await sharp(buf).metadata(); width = meta.width; height = meta.height; } catch {}
       out.push({ buffer: buf, filename: `image_${parsed.username}_${m.id}.${ext}`, mime, type: 'document', width, height });
     }
-    if (includeVideo && m.video) {
+    if (includeVideo && (m.video || (m.document && (m.document.mimeType || '').startsWith('video/')))) {
       const buf = await client.downloadMedia(m, { workers: 2 });
       out.push({ buffer: buf, filename: `video_${parsed.username}_${m.id}.mp4`, mime: 'video/mp4', type: 'video' });
     }
@@ -611,7 +628,7 @@ function markPosted(item, keys) {
 }
 
 // ----------------- Telegraf -----------------
-const bot = new Telegraf(BOT_TOKEN, { handlerTimeout: 0 });
+const bot = new Telegraf(BOT_TOKEN, { handlerTimeout: 0 }); // оставляю как было
 bot.catch((err, ctx) => { log('bot.error', { error: err?.message || String(err), update_type: ctx?.updateType, stack: trunc(err?.stack || '', 1000) }); });
 
 bot.use(async (ctx, next) => {
@@ -705,13 +722,9 @@ async function offerNext(ctx) {
 async function publishToChannel(ctx, item, keys) {
   log('publish.begin', { id: keys.id, source: item.source, link: item.link });
   try {
-    // 1) Переписать текст
     const plain = (item.contentSnippet || stripHtml(item.content || '')).trim();
-    const rewrittenRaw = await deepseekChatRewrite({ title: item.title || '', plain, link: item.link || '' });
-    const { title: newTitle, body: rewrittenBody } = splitTitleFromBody(rewrittenRaw);
-    const finalTitle = newTitle || makeTitleFromPlain(plain);
 
-    // 2) Только оригиналы через MTProto
+    // ---- FIX: сначала стягиваем все медиа альбома, чтобы передать их список в промпт ----
     let originals = [];
     if (HAS_MTPROTO && item.link) {
       try { originals = await fetchMediaByLink(item.link, { includeVideo: false }); }
@@ -719,8 +732,6 @@ async function publishToChannel(ctx, item, keys) {
     } else {
       log('mtproto.disabled_or_no_link', { has_mtproto: HAS_MTPROTO, link: !!item.link });
     }
-
-    // Фильтр изображений (видео отключили)
     originals = originals.filter(m => (m.mime || '').startsWith('image/'));
     if (!originals.length) {
       log('publish.no_media', { reason: 'no_originals' });
@@ -728,7 +739,20 @@ async function publishToChannel(ctx, item, keys) {
       log('publish.media.originals', { count: originals.length, samples: originals.slice(0,2).map(x=>({fn:x.filename,w:x.width,h:x.height})) });
     }
 
-    // 3) Формируем отправку (без перекодирования; опционально фильтр)
+    // метаданные всех фото альбома — пойдут в итоговый промпт
+    const imagesMeta = originals.map(m => ({ filename: m.filename, width: m.width, height: m.height }));
+
+    // 1) Переписать текст (теперь — с блоком IMAGES в prompt)
+    const rewrittenRaw = await deepseekChatRewrite({
+      title: item.title || '',
+      plain,
+      link: item.link || '',
+      imagesMeta, // <-- передаём все фото альбома в промпт
+    });
+    const { title: newTitle, body: rewrittenBody } = splitTitleFromBody(rewrittenRaw);
+    const finalTitle = newTitle || makeTitleFromPlain(plain);
+
+    // 2) Формируем отправку (без перекодирования; опционально фильтр)
     let mediaGroup = [];
     if (originals.length) {
       const take = Math.min(originals.length, MAX_PHOTOS);
@@ -736,36 +760,31 @@ async function publishToChannel(ctx, item, keys) {
         const m = originals[i];
         let buf = m.buffer;
 
-        // По желанию — лёгкий фильтр/уникализация без даунскейла
         if (IMG_REQUIRE_ORIGINALITY || IMG_STYLE !== 'none') {
           try { buf = await ensureDistinctEnoughSharp(buf, m.width || 0, m.height || 0); }
           catch (e) { log('img.ensureDistinct.error', { error: e.message }); }
         }
 
         if (PUBLISH_AS_DOCUMENT) {
-          // ВНИМАНИЕ: document нельзя отправить в mediaGroup; отправим по одному ниже
           mediaGroup.push({ kind: 'document', file: { source: buf, filename: m.filename }, mime: m.mime });
         } else {
-          // Photo-вариант (альбом)
           mediaGroup.push({ kind: 'photo', file: { source: buf, filename: m.filename } });
         }
       }
     }
 
-    // 4) Подпись
+    // 3) Подпись
     const caption = buildCaption(finalTitle, rewrittenBody || rewrittenRaw);
 
-    // 5) Отправка
+    // 4) Отправка
     if (mediaGroup.length) {
       if (PUBLISH_AS_DOCUMENT) {
-        // Отправляем по одному документу (чтобы TG не пережимал). Подпись — на первом.
         for (let i = 0; i < mediaGroup.length; i++) {
           const doc = mediaGroup[i];
           const opts = (i === 0) ? { caption, parse_mode: 'HTML' } : {};
           await ctx.telegram.sendDocument(CHANNEL_ID, doc.file, opts);
         }
       } else {
-        // Альбом фото (TG может немного пережимать, но исходник мы взяли оригинальный).
         const album = mediaGroup.slice(0, MAX_PHOTOS).map((p, idx) => {
           const base = { type: 'photo', media: p.file };
           if (idx === 0) { base.caption = caption; base.parse_mode = 'HTML'; }
@@ -774,7 +793,6 @@ async function publishToChannel(ctx, item, keys) {
         await ctx.telegram.sendMediaGroup(CHANNEL_ID, album);
       }
     } else {
-      // Текст без медиа
       await ctx.telegram.sendMessage(CHANNEL_ID, caption, { parse_mode: 'HTML', disable_web_page_preview: true });
     }
 
